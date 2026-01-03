@@ -5,7 +5,7 @@ COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
 # Disable CGO to create a statically linked binary suitable for scratch/alpine
-RUN CGO_ENABLED=0 GOOS=linux go build -race -a -installsuffix cgo -o opus-mcp .
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags "-X 'opus-mcp/internal/metadata.BuildVersion=v.0.0.1' -X 'opus-mcp/internal/metadata.BuildTime=$(date)'" -race -a -installsuffix cgo -o opus-mcp .
 
 # Stage 2: Create the final, minimal image
 FROM scratch
