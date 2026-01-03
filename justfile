@@ -12,7 +12,7 @@ run-stdio: build
 # Run the server with http transport
 run-http: build
     @echo "Running the project..."
-    @./bin/opus-mcp -transport http &
+    @./bin/opus-mcp -transport http
 
 # Launch MCP Inspector afer building the server
 launch-inspector: build
