@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"opus-mcp/internal/metadata"
 	"opus-mcp/internal/tools"
+	"runtime"
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -29,6 +30,8 @@ func healthCheckHandler(w http.ResponseWriter, r *http.Request) {
 		"buildVersion": metadata.BuildVersion,
 		"buildTime":    metadata.BuildTime,
 		"uptime":       uptime().String(),
+		"os":           runtime.GOOS,
+		"arch":         runtime.GOARCH,
 	}
 	jsonData, err := json.MarshalIndent(responseMap, "", "    ")
 	if err != nil {
