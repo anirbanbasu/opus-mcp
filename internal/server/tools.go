@@ -1,4 +1,4 @@
-package tools
+package server
 
 import (
 	"context"
@@ -25,7 +25,7 @@ type CategoryFetchLatestOutput struct {
 	Results string `json:"results" jsonschema:"The latest publications from arXiv in JSON format"`
 }
 
-type Arxiv interface {
+type arxiv interface {
 	CategoryFetchLatest(
 		ctx context.Context,
 		req *mcp.CallToolRequest,
@@ -37,9 +37,9 @@ type Arxiv interface {
 	)
 }
 
-type ArxivImpl struct{}
+type arxivImpl struct{}
 
-func (a ArxivImpl) CategoryFetchLatest(ctx context.Context, req *mcp.CallToolRequest, args ArxivCategoryFetchLatestArgs) (
+func (a arxivImpl) CategoryFetchLatest(ctx context.Context, req *mcp.CallToolRequest, args ArxivCategoryFetchLatestArgs) (
 	*mcp.CallToolResult,
 	CategoryFetchLatestOutput,
 	error,

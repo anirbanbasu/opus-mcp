@@ -8,7 +8,6 @@ import (
 	"log/slog"
 	"net/http"
 	"opus-mcp/internal/metadata"
-	"opus-mcp/internal/tools"
 	"runtime"
 	"time"
 
@@ -21,6 +20,25 @@ var startTime time.Time
 
 func uptime() time.Duration {
 	return time.Since(startTime)
+}
+
+// CORSMiddleware adds CORS headers to responses and handles OPTIONS requests
+func CORSMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Set the allowed origin (use specific origins in production, not "*")
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT, DELETE")
+		w.Header().Set("Access-Control-Allow-Headers", "Accept, Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, mcp-protocol-version")
+
+		// Handle preflight requests
+		if r.Method == "OPTIONS" {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+
+		// Pass the request to the next handler
+		next.ServeHTTP(w, r)
+	})
 }
 
 func healthCheckHandler(w http.ResponseWriter, r *http.Request) {
@@ -39,6 +57,7 @@ func healthCheckHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "JSON marshalling failed"+err.Error(), http.StatusInternalServerError)
 		return
 	}
+	w.Header().Set("Connection", "close")
 	byteN, err := io.Writer.Write(w, jsonData)
 	if err != nil {
 		slog.Error("health check response writing failed", "error", err)
@@ -48,7 +67,7 @@ func healthCheckHandler(w http.ResponseWriter, r *http.Request) {
 	slog.Info("health check responded", "bytes_written", byteN)
 }
 
-func run_server(transport_flag string, server_host string, server_port int) {
+func runServer(transport_flag string, server_host string, server_port int) {
 	ctx := context.Background()
 	server := mcp.NewServer(
 		&mcp.Implementation{
@@ -57,7 +76,7 @@ func run_server(transport_flag string, server_host string, server_port int) {
 			Version: metadata.BuildVersion,
 		},
 		nil)
-	var arxivTool tools.Arxiv = tools.ArxivImpl{}
+	var arxivTool arxiv = arxivImpl{}
 	mcp.AddTool(server,
 		&mcp.Tool{
 			Name:        "arxiv_category_fetch_latest",
@@ -65,25 +84,20 @@ func run_server(transport_flag string, server_host string, server_port int) {
 		},
 		arxivTool.CategoryFetchLatest)
 
-	var httpHandler http.Handler
-	switch transport_flag {
-	case "stdio":
-		// do nothing here, handled below
-	case "http":
-		httpHandler = mcp.NewStreamableHTTPHandler(func(r *http.Request) *mcp.Server {
+	if transport_flag == "http" {
+		// Start HTTP server
+		mcpHandler := mcp.NewStreamableHTTPHandler(func(r *http.Request) *mcp.Server {
 			return server
 		}, &mcp.StreamableHTTPOptions{Stateless: true, JSONResponse: true})
-	default:
-		panic("unknown transport flag: " + transport_flag)
-	}
-
-	if httpHandler != nil {
-		// Start HTTP server
 		mux := http.NewServeMux()
-		mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { io.WriteString(w, "Use /mcp to access the MCP server.") })
-		mux.Handle("/mcp", httpHandler)
+		mux.Handle("/mcp", mcpHandler)
 		mux.HandleFunc("/health", healthCheckHandler)
 		mux.HandleFunc("/healthz", healthCheckHandler)
+		mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Connection", "close")
+			io.WriteString(w, "Use /mcp to access the MCP server. Use /health or /healthz for health checks.")
+		})
+		handlerWithCORSMiddleware := CORSMiddleware(mux)
 		startTime = time.Now()
 		// ASCII art: https://patorjk.com/software/taag/#p=display&f=Pagga&t=OPUS+MCP
 		fmt.Println(`
@@ -92,8 +106,8 @@ func run_server(transport_flag string, server_host string, server_port int) {
 ░▀▀▀░▀░░░▀▀▀░▀▀▀░░░▀░▀░▀▀▀░▀░░
 		`)
 		fmt.Println("BuildVersion: " + metadata.BuildVersion + " BuildTime: " + metadata.BuildTime + ".")
-		fmt.Printf("Starting HTTP server on %s:%d, press Ctrl+C to stop.\n", server_host, server_port)
-		if err := http.ListenAndServe(server_host+":"+fmt.Sprint(server_port), mux); err != nil {
+		fmt.Printf("Starting HTTP server on http://%s:%d, press Ctrl+C to stop.\n", server_host, server_port)
+		if err := http.ListenAndServe(server_host+":"+fmt.Sprint(server_port), handlerWithCORSMiddleware); err != nil {
 			panic(err)
 		}
 	} else {
@@ -110,5 +124,5 @@ func Serve(transport_flag string, server_host string, server_port int) {
 			slog.Error("server crashed,", "error", r)
 		}
 	}()
-	run_server(transport_flag, server_host, server_port)
+	runServer(transport_flag, server_host, server_port)
 }
