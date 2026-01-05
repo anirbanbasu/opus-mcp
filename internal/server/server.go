@@ -16,19 +16,19 @@ import (
 
 // var BuildVersion string = "uninitialised; use -ldflags `-X main.Version=1.0.0`" // Define BuildVersion as a global variable
 
-var startTime time.Time
+var serverProcessStartTime time.Time
 
 func uptime() time.Duration {
-	return time.Since(startTime)
+	return time.Since(serverProcessStartTime)
 }
 
-// CORSMiddleware adds CORS headers to responses and handles OPTIONS requests
-func CORSMiddleware(next http.Handler) http.Handler {
+// createCORSMiddleware adds CORS headers to responses and handles OPTIONS requests
+func createCORSMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Set the allowed origin (use specific origins in production, not "*")
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT, DELETE")
-		w.Header().Set("Access-Control-Allow-Headers", "Accept, Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, mcp-protocol-version")
+		w.Header().Set("Access-Control-Allow-Headers", "Accept, Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, Mcp-Protocol-Version, Mcp-Session-Id")
 
 		// Handle preflight requests
 		if r.Method == "OPTIONS" {
@@ -41,10 +41,41 @@ func CORSMiddleware(next http.Handler) http.Handler {
 	})
 }
 
+// createMCPLoggingMiddleware creates an MCP middleware that logs method calls.
+func createMCPLoggingMiddleware() mcp.Middleware {
+	return func(next mcp.MethodHandler) mcp.MethodHandler {
+		return func(
+			ctx context.Context,
+			method string,
+			req mcp.Request,
+		) (mcp.Result, error) {
+			start := time.Now()
+			sessionID := req.GetSession().ID()
+
+			// Log request details.
+			slog.Info("(Request) Session: \"" + sessionID + "\" | Method: " + method)
+
+			// Call the actual handler.
+			result, err := next(ctx, method, req)
+
+			// Log response details.
+			duration := time.Since(start)
+
+			if err != nil {
+				slog.Info("(Response) Session: \"" + sessionID + "\" | Method: " + method + " | Status: ERROR | Duration: " + duration.String() + " | Error: " + err.Error())
+			} else {
+				slog.Info("(Response) Session: \"" + sessionID + "\" | Method: " + method + " | Status: OK | Duration: " + duration.String())
+			}
+
+			return result, err
+		}
+	}
+}
+
 func healthCheckHandler(w http.ResponseWriter, r *http.Request) {
 	responseMap := map[string]any{
 		"status":       "ok",
-		"name":         "OPUS MCP server (opus-mcp)",
+		"name":         metadata.APP_TITLE + " (" + metadata.APP_NAME + ")",
 		"buildVersion": metadata.BuildVersion,
 		"buildTime":    metadata.BuildTime,
 		"uptime":       uptime().String(),
@@ -64,49 +95,64 @@ func healthCheckHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Response writing failed: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
-	slog.Info("health check responded", "bytes_written", byteN)
+	slog.Debug("health check responded", "bytes_written", byteN)
 }
 
-func runServer(transport_flag string, server_host string, server_port int) {
+func runServer(transport_flag string, server_host string, server_port int, stateless bool, enableRequestResponseLogging bool) {
 	ctx := context.Background()
 	server := mcp.NewServer(
 		&mcp.Implementation{
-			Name: "opus-mcp",
+			Name:       metadata.APP_NAME,
+			Title:      metadata.APP_TITLE,
+			WebsiteURL: "https://github.com/anirbanbasu/opus-mcp",
 			// Use -ldflags to set the version at build time.
 			Version: metadata.BuildVersion,
 		},
-		nil)
-	var arxivTool arxiv = arxivImpl{}
+		&mcp.ServerOptions{
+			// Disable logging capability to prevent setLevel errors during initialization
+			Capabilities: &mcp.ServerCapabilities{},
+		},
+	)
+	if enableRequestResponseLogging {
+		// Add MCP-level logging middleware.
+		slog.Info("Server request response logging has been enabled.")
+		server.AddReceivingMiddleware(createMCPLoggingMiddleware())
+	}
 	mcp.AddTool(server,
 		&mcp.Tool{
 			Name:        "arxiv_category_fetch_latest",
 			Description: "Fetch latest publications from arXiv by category",
 		},
-		arxivTool.CategoryFetchLatest)
+		ArchiveCategoryFetchLatest)
 
 	if transport_flag == "http" {
 		// Start HTTP server
 		mcpHandler := mcp.NewStreamableHTTPHandler(func(r *http.Request) *mcp.Server {
 			return server
-		}, &mcp.StreamableHTTPOptions{Stateless: true, JSONResponse: true})
+		}, &mcp.StreamableHTTPOptions{Stateless: stateless, JSONResponse: true})
 		mux := http.NewServeMux()
 		mux.Handle("/mcp", mcpHandler)
 		mux.HandleFunc("/health", healthCheckHandler)
-		mux.HandleFunc("/healthz", healthCheckHandler)
+		mux.Handle("/healthz", http.RedirectHandler("/health", http.StatusMovedPermanently))
 		mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Connection", "close")
 			io.WriteString(w, "Use /mcp to access the MCP server. Use /health or /healthz for health checks.")
 		})
-		handlerWithCORSMiddleware := CORSMiddleware(mux)
-		startTime = time.Now()
+		handlerWithCORSMiddleware := createCORSMiddleware(mux)
+		serverProcessStartTime = time.Now()
 		// ASCII art: https://patorjk.com/software/taag/#p=display&f=Pagga&t=OPUS+MCP
 		fmt.Println(`
 ░█▀█░█▀█░█░█░█▀▀░░░█▄█░█▀▀░█▀█
 ░█░█░█▀▀░█░█░▀▀█░░░█░█░█░░░█▀▀
 ░▀▀▀░▀░░░▀▀▀░▀▀▀░░░▀░▀░▀▀▀░▀░░
 		`)
-		fmt.Println("BuildVersion: " + metadata.BuildVersion + " BuildTime: " + metadata.BuildTime + ".")
-		fmt.Printf("Starting HTTP server on http://%s:%d, press Ctrl+C to stop.\n", server_host, server_port)
+		slog.Info("BuildVersion: " + metadata.BuildVersion + " | BuildTime: " + metadata.BuildTime + " | OS: " + runtime.GOOS + " | Architecture: " + runtime.GOARCH)
+		slog.Info("Starting HTTP server on http://" + server_host + ":" + fmt.Sprint(server_port) + ", press Ctrl+C to stop.")
+		if stateless {
+			slog.Info("Server will be set to stateless mode.")
+		} else {
+			slog.Info("Server will be set to stateful mode.")
+		}
 		if err := http.ListenAndServe(server_host+":"+fmt.Sprint(server_port), handlerWithCORSMiddleware); err != nil {
 			panic(err)
 		}
@@ -117,12 +163,12 @@ func runServer(transport_flag string, server_host string, server_port int) {
 	}
 }
 
-func Serve(transport_flag string, server_host string, server_port int) {
+func Serve(transport_flag string, server_host string, server_port int, stateless bool, enableRequestResponseLogging bool) {
 	// Deferred function to recover from a panic
 	defer func() {
 		if r := recover(); r != nil {
 			slog.Error("server crashed,", "error", r)
 		}
 	}()
-	runServer(transport_flag, server_host, server_port)
+	runServer(transport_flag, server_host, server_port, stateless, enableRequestResponseLogging)
 }

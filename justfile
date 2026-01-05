@@ -17,5 +17,5 @@ run-http: build
 # Launch MCP Inspector afer building the server
 launch-inspector: build
     @echo "Launching MCP Inspector..."
-    # @nvm use --lts
+    source ~/.nvm/nvm.sh && nvm use --lts
     @npx @modelcontextprotocol/inspector

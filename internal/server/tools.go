@@ -25,27 +25,27 @@ type CategoryFetchLatestOutput struct {
 	Results string `json:"results" jsonschema:"The latest publications from arXiv in JSON format"`
 }
 
-type arxiv interface {
-	CategoryFetchLatest(
-		ctx context.Context,
-		req *mcp.CallToolRequest,
-		args ArxivCategoryFetchLatestArgs,
-	) (
-		*mcp.CallToolResult,
-		CategoryFetchLatestOutput,
-		error,
-	)
-}
+// type arxiv interface {
+// 	CategoryFetchLatest(
+// 		ctx context.Context,
+// 		req *mcp.CallToolRequest,
+// 		args ArxivCategoryFetchLatestArgs,
+// 	) (
+// 		*mcp.CallToolResult,
+// 		CategoryFetchLatestOutput,
+// 		error,
+// 	)
+// }
 
-type arxivImpl struct{}
+// type arxivImpl struct{}
 
-func (a arxivImpl) CategoryFetchLatest(ctx context.Context, req *mcp.CallToolRequest, args ArxivCategoryFetchLatestArgs) (
+func ArchiveCategoryFetchLatest(ctx context.Context, req *mcp.CallToolRequest, args ArxivCategoryFetchLatestArgs) (
 	*mcp.CallToolResult,
 	CategoryFetchLatestOutput,
 	error,
 ) {
 	if len(args.Category) == 0 {
-		return nil, CategoryFetchLatestOutput{}, fmt.Errorf("at least one category is required")
+		return nil, CategoryFetchLatestOutput{}, fmt.Errorf("at least one category is required, such as cs.AI")
 	}
 
 	// Set default value for CategoryJoinStrategy if empty
@@ -74,7 +74,7 @@ func (a arxivImpl) CategoryFetchLatest(ctx context.Context, req *mcp.CallToolReq
 
 	// Fetch contents from arXiv API
 	url := arxivApiEndpoint + "?search_query=" + searchQuery + "&start=" + fmt.Sprint(args.StartIndex) + "&max_results=" + fmt.Sprint(args.FetchSize) + "&sortBy=submittedDate&sortOrder=descending"
-	slog.Info("Fetching Atom feed from arXiv", "url", url)
+	slog.Debug("Fetching Atom feed from arXiv", "url", url)
 	resp, err := http.Get(url)
 	if err != nil {
 		slog.Warn("failed to fetch from arXiv", "error", err)
