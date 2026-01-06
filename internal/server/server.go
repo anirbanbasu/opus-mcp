@@ -130,6 +130,24 @@ func runServer(transport_flag string, server_host string, server_port int, state
 	var (
 		inputSchema = &jsonschema.Schema{
 			Type: "object",
+			// Defs: map[string]*jsonschema.Schema{
+			// 	"CategoryWithOperator": {
+			// 		Type: "object",
+			// 		Properties: map[string]*jsonschema.Schema{
+			// 			"category": {
+			// 				Type:        "string",
+			// 				Description: "The research category, such as cs.AI",
+			// 			},
+			// 			"operator": {
+			// 				Type:        "string",
+			// 				Description: "Optional operator for this category.",
+			// 				Enum:        []any{"AND", "OR", "NOT"},
+			// 				Default:     json.RawMessage([]byte(`"AND"`)),
+			// 			},
+			// 		},
+			// 		Required: []string{"category"},
+			// 	},
+			// },
 			Properties: map[string]*jsonschema.Schema{
 				"category": {
 					Description: "List of unique arXiv categories, e.g., cs.AI",
@@ -141,6 +159,15 @@ func runServer(transport_flag string, server_host string, server_port int, state
 					},
 					UniqueItems: true,
 				},
+				// "test": {
+				// 	Description: "List of test arXiv categories, e.g., cs.AI",
+				// 	Type:        "array",
+				// 	MinItems:    jsonschema.Ptr(1),
+				// 	AdditionalProperties: &jsonschema.Schema{
+				// 		Ref: "#/$defs/CategoryWithOperator",
+				// 	},
+				// 	UniqueItems: true,
+				// },
 				"startIndex": {
 					Description: "The starting index for fetching results (0-based)",
 					Type:        "integer",
