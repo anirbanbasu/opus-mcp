@@ -11,6 +11,7 @@ import (
 	"runtime"
 	"time"
 
+	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -118,12 +119,71 @@ func runServer(transport_flag string, server_host string, server_port int, state
 		slog.Info("Server request response logging has been enabled.")
 		server.AddReceivingMiddleware(createMCPLoggingMiddleware())
 	}
+	// Setup all the tools
 	mcp.AddTool(server,
 		&mcp.Tool{
 			Name:        "arxiv_category_fetch_latest",
 			Description: "Fetch latest publications from arXiv by category",
 		},
 		ArchiveCategoryFetchLatest)
+
+	var (
+		inputSchema = &jsonschema.Schema{
+			Type: "object",
+			Properties: map[string]*jsonschema.Schema{
+				"category": {
+					Description: "List of unique arXiv categories, e.g., cs.AI",
+					Examples:    []any{"cs.AI"},
+					Type:        "array",
+					MinItems:    jsonschema.Ptr(1),
+					Items: &jsonschema.Schema{
+						Type: "string",
+					},
+					UniqueItems: true,
+				},
+				"startIndex": {
+					Description: "The starting index for fetching results (0-based)",
+					Type:        "integer",
+					Minimum:     jsonschema.Ptr(0.0),
+					Default:     json.RawMessage([]byte(`0`)),
+				},
+				"fetchSize": {
+					Description: "Number of results to fetch (min: 1, max: 100)",
+					Type:        "integer",
+					Minimum:     jsonschema.Ptr(1.0),
+					Maximum:     jsonschema.Ptr(100.0),
+					Default:     json.RawMessage([]byte(`10`)),
+				},
+				"categoryJoinStrategy": {
+					Description: "Strategy to join multiple categories (AND or OR)",
+					Type:        "string",
+					Enum:        []any{"AND", "OR"},
+					Default:     json.RawMessage([]byte(`"AND"`)),
+					Deprecated:  true,
+				},
+			},
+			Required: []string{"category"},
+		}
+		// TODO: This output schema definition is wrong although this works! Need to fix it later.
+		outputSchema = &jsonschema.Schema{
+			Type:       "object",
+			Properties: map[string]*jsonschema.Schema{},
+		}
+		// outputSchema, err = jsonschema.ForType(&gofeed.FeedType, nil)
+	)
+	arxivWrapper, err := NewArxivWrapper(inputSchema, outputSchema)
+	if err != nil {
+		slog.Error("failed to create ArxivWrapper", "error", err)
+		return
+	}
+	slog.Info("arxivWrapper created successfully" + arxivWrapper.inputSchema.Schema().ID)
+
+	server.AddTool(&mcp.Tool{
+		Name:         "arxiv_category_fetch_latest_manual",
+		Description:  "Fetch latest publications from arXiv by category",
+		InputSchema:  inputSchema,
+		OutputSchema: outputSchema,
+	}, arxivWrapper.CategoryFetchLatest)
 
 	if transport_flag == "http" {
 		// Start HTTP server
