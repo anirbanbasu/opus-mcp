@@ -1,16 +1,17 @@
 {
     "name": "Opus MCP Go Development",
-    "image": "golang:1.25-trixie",
+    "image": "debian:trixie-slim",
     "features": {
-        "ghcr.io/devcontainers/features/common-utils:2": {
+        "ghcr.io/devcontainers/features/common-utils:latest": {
             "installZsh": true,
+            "configureZshAsDefaultShell": false,
             "installOhMyZsh": true,
             "upgradePackages": true,
             "username": "vscode",
             "userUid": "automatic",
             "userGid": "automatic"
         },
-        "ghcr.io/devcontainers/features/git:1": {
+        "ghcr.io/devcontainers/features/git:latest": {
             "version": "latest",
             "ppa": false
         }
@@ -21,8 +22,7 @@
                 "golang.go",
                 "GitHub.copilot",
                 "GitHub.copilot-chat",
-                "eamodio.gitlens",
-                "streetsidesoftware.code-spell-checker"
+                "eamodio.gitlens"
             ],
             "settings": {
                 "go.useLanguageServer": true,
@@ -42,10 +42,12 @@
             }
         }
     },
+    "initializeCommand": "bash -c 'mkdir -p ${localWorkspaceFolder}/.devcontainer/.gitconfig-cache && [ -f ~/.gitconfig ] && cp ~/.gitconfig ${localWorkspaceFolder}/.devcontainer/.gitconfig-cache/gitconfig || true'",
     "postCreateCommand": "bash .devcontainer/setup.sh",
+    "postStartCommand": "exit",
     "remoteUser": "vscode",
     "mounts": [
-        "source=${localEnv:HOME}/.gitconfig,target=/home/vscode/.gitconfig,type=bind,consistency=cached"
+        "source=${localWorkspaceFolder}/.devcontainer/.gitconfig-cache,target=/tmp/.host-gitconfig-cache,type=bind,readonly,consistency=cached"
     ],
     "forwardPorts": [
         8000

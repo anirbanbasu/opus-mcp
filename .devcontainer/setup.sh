@@ -3,9 +3,16 @@ set -e
 
 echo "🚀 Setting up Opus MCP development environment..."
 
+# Copy .gitconfig from host if it exists and hasn't been copied yet
+if [ -f "/tmp/.host-gitconfig-cache/gitconfig" ] && [ ! -f "/home/vscode/.gitconfig" ]; then
+    echo "📋 Copying Git configuration from host..."
+    cp /tmp/.host-gitconfig-cache/gitconfig /home/vscode/.gitconfig
+    chmod 644 /home/vscode/.gitconfig
+fi
+
 # Install Homebrew
 echo "🍺 Installing Homebrew..."
-/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+NONINTERACTIVE=1 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
 echo >> /home/vscode/.bashrc
 echo 'eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"' >> /home/vscode/.bashrc
 eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
@@ -16,6 +23,13 @@ brew install just
 
 # Install Go tools
 echo "🔧 Installing Go development tools..."
+
+# Install Go
+echo "  → Go"
+brew install go
+
+echo >> /home/vscode/.bashrc
+echo 'export PATH="$(go env GOPATH)/bin:$PATH"' >> /home/vscode/.bashrc
 export PATH="$(go env GOPATH)/bin:$PATH"
 
 # Install golangci-lint
@@ -42,6 +56,10 @@ brew install gitleaks
 echo "  → prek"
 brew install prek
 
+# Install pre-commit hooks
+echo "🔩 Installing pre-commit hooks..."
+just install-hooks
+
 # Download Go dependencies
 echo "📚 Downloading Go dependencies..."
 go mod download
@@ -55,7 +73,7 @@ just --version
 go version
 golangci-lint --version
 gofumpt -version
-goimports -version 2>&1 | head -1 || echo "goimports installed"
+command -v goimports >/dev/null && echo "goimports installed" || echo "goimports not found"
 gosec --version
 gitleaks version
 prek --version
