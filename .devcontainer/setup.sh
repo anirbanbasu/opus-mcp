@@ -8,6 +8,8 @@ if [ -f "/tmp/.host-gitconfig-cache/gitconfig" ] && [ ! -f "/home/vscode/.gitcon
     echo "📋 Copying Git configuration from host..."
     cp /tmp/.host-gitconfig-cache/gitconfig /home/vscode/.gitconfig
     chmod 644 /home/vscode/.gitconfig
+    # Remove host-specific git settings that won't work in the container
+    git config --global --unset commit.template 2>/dev/null || true
 fi
 
 # Install Homebrew
