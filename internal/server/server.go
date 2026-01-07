@@ -129,8 +129,8 @@ func runServer(transport_flag string, server_host string, server_port int, state
 			Type: "object",
 			Properties: map[string]*jsonschema.Schema{
 				"category": {
-					Description: "Expression of arXiv categories with boolean operators. See https://arxiv.org/category_taxonomy for valid categories.",
-					Examples:    []any{"cs.AI", "cs.LG not cs.CV not cs.RO", "cs.AI + cs.LG - cs.CV", "cs.AI | cs.LG"},
+					Description: "Expression of arXiv categories with boolean operators.",
+					Examples:    []any{"cs.AI", "cs.LG not cs.CV not cs.RO", "cs.AI + cs.LG - cs.CV", "cs.AI or (cs.LG not cs.CV)"},
 					Type:        "string",
 					Items: &jsonschema.Schema{
 						Type: "string",
@@ -168,7 +168,7 @@ func runServer(transport_flag string, server_host string, server_port int, state
 
 	server.AddTool(&mcp.Tool{
 		Name:         "arxiv_category_fetch_latest",
-		Description:  "Fetch latest publications from arXiv by category",
+		Description:  "Fetch latest publications from arXiv by category. See https://arxiv.org/category_taxonomy for valid categories.",
 		InputSchema:  inputSchema,
 		OutputSchema: outputSchema,
 	}, arxivWrapper.CategoryFetchLatest)
