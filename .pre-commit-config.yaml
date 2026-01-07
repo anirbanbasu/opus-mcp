@@ -90,6 +90,10 @@ repos:
       - id: mixed-line-ending
         name: Check for mixed line endings
         args: ['--fix=lf']
+      - id: check-executables-have-shebangs
+        name: Check executables start with '#!'
+      - id: check-shebang-scripts-are-executable
+        name: Check scripts starting with '#!' are executable
       - id: detect-private-key
         name: Detect private keys
       - id: detect-aws-credentials
