@@ -119,55 +119,19 @@ func runServer(transport_flag string, server_host string, server_port int, state
 		slog.Info("Server request response logging has been enabled.")
 		server.AddReceivingMiddleware(createMCPLoggingMiddleware())
 	}
-	// Setup all the tools
-	mcp.AddTool(server,
-		&mcp.Tool{
-			Name:        "arxiv_category_fetch_latest",
-			Description: "Fetch latest publications from arXiv by category",
-		},
-		ArchiveCategoryFetchLatest)
 
 	var (
 		inputSchema = &jsonschema.Schema{
 			Type: "object",
-			// Defs: map[string]*jsonschema.Schema{
-			// 	"CategoryWithOperator": {
-			// 		Type: "object",
-			// 		Properties: map[string]*jsonschema.Schema{
-			// 			"category": {
-			// 				Type:        "string",
-			// 				Description: "The research category, such as cs.AI",
-			// 			},
-			// 			"operator": {
-			// 				Type:        "string",
-			// 				Description: "Optional operator for this category.",
-			// 				Enum:        []any{"AND", "OR", "NOT"},
-			// 				Default:     json.RawMessage([]byte(`"AND"`)),
-			// 			},
-			// 		},
-			// 		Required: []string{"category"},
-			// 	},
-			// },
 			Properties: map[string]*jsonschema.Schema{
 				"category": {
-					Description: "List of unique arXiv categories, e.g., cs.AI",
-					Examples:    []any{"cs.AI"},
-					Type:        "array",
-					MinItems:    jsonschema.Ptr(1),
+					Description: "Expression of arXiv categories with boolean operators. See https://arxiv.org/category_taxonomy for valid categories.",
+					Examples:    []any{"cs.AI", "cs.LG not cs.CV not cs.RO", "cs.AI + cs.LG - cs.CV", "cs.AI | cs.LG"},
+					Type:        "string",
 					Items: &jsonschema.Schema{
 						Type: "string",
 					},
-					UniqueItems: true,
 				},
-				// "test": {
-				// 	Description: "List of test arXiv categories, e.g., cs.AI",
-				// 	Type:        "array",
-				// 	MinItems:    jsonschema.Ptr(1),
-				// 	AdditionalProperties: &jsonschema.Schema{
-				// 		Ref: "#/$defs/CategoryWithOperator",
-				// 	},
-				// 	UniqueItems: true,
-				// },
 				"startIndex": {
 					Description: "The starting index for fetching results (0-based)",
 					Type:        "integer",
@@ -180,13 +144,6 @@ func runServer(transport_flag string, server_host string, server_port int, state
 					Minimum:     jsonschema.Ptr(1.0),
 					Maximum:     jsonschema.Ptr(100.0),
 					Default:     json.RawMessage([]byte(`10`)),
-				},
-				"categoryJoinStrategy": {
-					Description: "Strategy to join multiple categories (AND or OR)",
-					Type:        "string",
-					Enum:        []any{"AND", "OR"},
-					Default:     json.RawMessage([]byte(`"AND"`)),
-					Deprecated:  true,
 				},
 			},
 			Required: []string{"category"},
@@ -206,7 +163,7 @@ func runServer(transport_flag string, server_host string, server_port int, state
 	slog.Info("arxivWrapper created successfully" + arxivWrapper.inputSchema.Schema().ID)
 
 	server.AddTool(&mcp.Tool{
-		Name:         "arxiv_category_fetch_latest_manual",
+		Name:         "arxiv_category_fetch_latest",
 		Description:  "Fetch latest publications from arXiv by category",
 		InputSchema:  inputSchema,
 		OutputSchema: outputSchema,

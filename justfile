@@ -14,8 +14,13 @@ run-http: build
     @echo "Running the project..."
     @./bin/opus-mcp -transport http
 
-# Launch MCP Inspector afer building the server
-launch-inspector: build
-    @echo "Launching MCP Inspector..."
-    source ~/.nvm/nvm.sh && nvm use --lts
-    @npx @modelcontextprotocol/inspector
+# Run tests
+run-tests:
+    @echo "Running tests..."
+    @go test ./...
+
+# Launch MCP Inspector for debugging
+launch-inspector:
+    #!/usr/bin/env bash
+    echo "Launching MCP Inspector..."
+    . ~/.nvm/nvm.sh && nvm use --lts && npx @modelcontextprotocol/inspector
