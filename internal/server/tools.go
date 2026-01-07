@@ -78,7 +78,10 @@ func (t *ArxivWrapper) CategoryFetchLatest(ctx context.Context, req *mcp.CallToo
 	}
 
 	// Build search query for multiple categories
-	searchQuery := parser.ParseReconstructCategoryExpression(input.Category)
+	searchQuery, err := parser.ParseReconstructCategoryExpression(input.Category)
+	if err != nil {
+		return mcp_tool_errorf("failed to parse category expression: %v", err), nil
+	}
 
 	// Fetch contents from arXiv API
 	url := arxivApiEndpoint + "?search_query=" + searchQuery + "&start=" + fmt.Sprint(input.StartIndex) + "&max_results=" + fmt.Sprint(input.FetchSize) + "&sortBy=submittedDate&sortOrder=descending"

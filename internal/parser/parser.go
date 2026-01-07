@@ -1,6 +1,7 @@
 package parser
 
 import (
+	"errors"
 	"strings"
 )
 
@@ -53,7 +54,7 @@ type parser struct {
 	pos    int
 }
 
-func (p *parser) parseExpression() string {
+func (p *parser) parseExpression() (string, error) {
 	var parts []string
 
 	for p.pos < len(p.tokens) {
@@ -78,7 +79,11 @@ func (p *parser) parseExpression() string {
 		p.pos++
 		switch tok.Type {
 		case tokenLParen:
-			parts = append(parts, "("+p.parseExpression()+")")
+			expr, err := p.parseExpression()
+			if err != nil {
+				return "", err
+			}
+			parts = append(parts, "("+expr+")")
 		case tokenIdent:
 			parts = append(parts, "cat:"+tok.Value)
 		case tokenAnd, tokenOr, tokenNot:
@@ -89,11 +94,20 @@ func (p *parser) parseExpression() string {
 	if p.pos < len(p.tokens) && p.tokens[p.pos].Type == tokenRParen {
 		p.pos++
 	}
-	return strings.Join(parts, " ")
+
+	result := strings.Join(parts, "+")
+	if result == "" {
+		return "", errors.New("empty expression")
+	}
+	return result, nil
 }
 
-func ParseReconstructCategoryExpression(input string) string {
+func ParseReconstructCategoryExpression(input string) (string, error) {
 	tokens := lex(input)
 	p := &parser{tokens: tokens}
-	return "(" + p.parseExpression() + ")"
+	expr, err := p.parseExpression()
+	if err != nil {
+		return "", err
+	}
+	return "(" + expr + ")", nil
 }
