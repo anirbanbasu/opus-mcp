@@ -1,6 +1,6 @@
 {
     "name": "Opus MCP Go Development",
-    "image": "mcr.microsoft.com/devcontainers/go:1-1.25-trixie",
+    "image": "golang:1.25-trixie",
     "features": {
         "ghcr.io/devcontainers/features/common-utils:2": {
             "installZsh": true,

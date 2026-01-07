@@ -3,9 +3,16 @@ set -e
 
 echo "🚀 Setting up Opus MCP development environment..."
 
+# Install Homebrew
+echo "🍺 Installing Homebrew..."
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+echo >> /home/vscode/.bashrc
+echo 'eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"' >> /home/vscode/.bashrc
+eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+
 # Install just (task runner)
 echo "📦 Installing just..."
-curl --proto '=https' --tlsv1.2 -sSf https://just.systems/install.sh | bash -s -- --to /usr/local/bin
+brew install just
 
 # Install Go tools
 echo "🔧 Installing Go development tools..."
@@ -13,7 +20,7 @@ export PATH="$(go env GOPATH)/bin:$PATH"
 
 # Install golangci-lint
 echo "  → golangci-lint"
-curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.62.2
+brew install golangci-lint
 
 # Install gofumpt
 echo "  → gofumpt"
@@ -29,13 +36,11 @@ go install github.com/securego/gosec/v2/cmd/gosec@latest
 
 # Install gitleaks
 echo "  → gitleaks"
-GITLEAKS_VERSION="8.24.2"
-curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" | tar -xz -C /usr/local/bin gitleaks
-chmod +x /usr/local/bin/gitleaks
+brew install gitleaks
 
 # Install prek
 echo "  → prek"
-curl --proto '=https' --tlsv1.2 -LsSf https://github.com/j178/prek/releases/download/v0.2.25/prek-installer.sh | sh
+brew install prek
 
 # Download Go dependencies
 echo "📚 Downloading Go dependencies..."
