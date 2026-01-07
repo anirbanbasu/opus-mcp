@@ -1,0 +1,26 @@
+# Gitleaks configuration for opus-mcp
+# https://github.com/gitleaks/gitleaks
+
+title = "Gitleaks Configuration for opus-mcp"
+
+[extend]
+# Use the default gitleaks configuration as a base
+useDefault = true
+
+[allowlist]
+description = "Global allowlist"
+paths = [
+    # Ignore test files that may contain fake credentials for testing
+    '''.*_test\.go''',
+    # Ignore go.sum (dependency checksums)
+    '''go\.sum''',
+]
+
+# Allow specific strings that look like secrets but aren't
+regexes = [
+    # Example arXiv API endpoints (not secrets)
+    '''export\.arxiv\.org/api''',
+]
+
+# Allowlist specific commits (add commit SHAs here if needed)
+commits = []

@@ -1,0 +1,122 @@
+# Pre-commit hooks for opus-mcp Go project
+# Install prek (recommended): https://github.com/asottile/prek
+# Or pre-commit: https://pre-commit.com/
+# Run: prek install (or pre-commit install)
+# Run manually: prek run --all-files (or pre-commit run --all-files)
+
+repos:
+  # Go formatting and imports
+  - repo: local
+    hooks:
+      - id: gofumpt
+        name: Format Go code (gofumpt)
+        entry: bash
+        language: system
+        types: [go]
+        args:
+          - -c
+          - |
+            if [ -n "$(gofumpt -l "$@")" ]; then
+              echo "Files need formatting. Run: just fmt"
+              gofumpt -l "$@"
+              exit 1
+            fi
+          - --
+      - id: goimports
+        name: Fix Go imports (goimports)
+        entry: bash
+        language: system
+        types: [go]
+        args:
+          - -c
+          - |
+            if [ -n "$(goimports -l "$@")" ]; then
+              echo "Imports need fixing. Run: just fmt"
+              goimports -l "$@"
+              exit 1
+            fi
+          - --
+      - id: go-mod-tidy
+        name: Run go mod tidy
+        entry: bash
+        language: system
+        pass_filenames: false
+        args:
+          - -c
+          - go mod tidy
+
+  # golangci-lint for comprehensive linting
+  - repo: local
+    hooks:
+      - id: golangci-lint
+        name: Run golangci-lint
+        entry: golangci-lint
+        language: system
+        types: [go]
+        pass_filenames: false
+        args: [run, ./...]
+
+  # Run tests
+  - repo: local
+    hooks:
+      - id: go-test
+        name: Run Go tests
+        entry: just run-tests
+        language: system
+        pass_filenames: false
+        always_run: true
+
+  # Additional checks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+        name: Trim trailing whitespace
+      - id: end-of-file-fixer
+        name: Fix end of files
+      - id: check-yaml
+        name: Check YAML files
+      - id: check-json
+        name: Check JSON files
+      - id: check-toml
+        name: Check TOML files
+      - id: check-added-large-files
+        name: Check for large files
+        args: ['--maxkb=500']
+      - id: check-merge-conflict
+        name: Check for merge conflicts
+      - id: check-case-conflict
+        name: Check for case conflicts
+      - id: mixed-line-ending
+        name: Check for mixed line endings
+        args: ['--fix=lf']
+      - id: detect-private-key
+        name: Detect private keys
+      - id: detect-aws-credentials
+        name: Detect AWS credentials
+        args: ['--allow-missing-credentials']
+
+  # Security: Detect secrets and credentials
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.24.2
+    hooks:
+      - id: gitleaks
+        name: Detect hardcoded secrets (gitleaks)
+
+  # Security: Go-specific vulnerability checks
+  - repo: local
+    hooks:
+      - id: gosec
+        name: Run gosec (Go security checker)
+        entry: bash
+        language: system
+        types: [go]
+        pass_filenames: false
+        args:
+          - -c
+          - |
+            if command -v gosec >/dev/null 2>&1; then
+              gosec ./...
+            else
+              echo "⚠ gosec not installed, skipping. Install with: go install github.com/securego/gosec/v2/cmd/gosec@latest"
+            fi

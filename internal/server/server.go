@@ -7,9 +7,13 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
-	"opus-mcp/internal/metadata"
+	"os"
+	"os/signal"
 	"runtime"
+	"syscall"
 	"time"
+
+	"opus-mcp/internal/metadata"
 
 	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -180,7 +184,9 @@ func runServer(transport_flag string, server_host string, server_port int, state
 		mux.Handle("/healthz", http.RedirectHandler("/health", http.StatusMovedPermanently))
 		mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Connection", "close")
-			io.WriteString(w, "Use /mcp to access the MCP server. Use /health or /healthz for health checks.")
+			if _, err := io.WriteString(w, "Use /mcp to access the MCP server. Use /health or /healthz for health checks."); err != nil {
+				slog.Warn("failed to write response", "error", err)
+			}
 		})
 		handlerWithCORSMiddleware := createCORSMiddleware(mux)
 		serverProcessStartTime = time.Now()
@@ -190,15 +196,49 @@ func runServer(transport_flag string, server_host string, server_port int, state
 ░█░█░█▀▀░█░█░▀▀█░░░█░█░█░░░█▀▀
 ░▀▀▀░▀░░░▀▀▀░▀▀▀░░░▀░▀░▀▀▀░▀░░
 		`)
-		slog.Info("BuildVersion: " + metadata.BuildVersion + " | BuildTime: " + metadata.BuildTime + " | OS: " + runtime.GOOS + " | Architecture: " + runtime.GOARCH)
-		slog.Info("Starting HTTP server on http://" + server_host + ":" + fmt.Sprint(server_port) + ", press Ctrl+C to stop.")
-		if stateless {
-			slog.Info("Server will be set to stateless mode.")
-		} else {
-			slog.Info("Server will be set to stateful mode.")
+		slog.Info("Build Version: " + metadata.BuildVersion + " | Build Time: " + metadata.BuildTime + " | OS: " + runtime.GOOS + " | CPU Architecture: " + runtime.GOARCH + " | Stateless Mode: " + fmt.Sprint(stateless))
+		slog.Info("Starting HTTP server on http://" + server_host + ":" + fmt.Sprint(server_port) + ", press Ctrl+C to stop")
+
+		httpServer := &http.Server{
+			Addr:         server_host + ":" + fmt.Sprint(server_port),
+			Handler:      handlerWithCORSMiddleware,
+			ReadTimeout:  15 * time.Second,
+			WriteTimeout: 15 * time.Second,
+			IdleTimeout:  60 * time.Second,
 		}
-		if err := http.ListenAndServe(server_host+":"+fmt.Sprint(server_port), handlerWithCORSMiddleware); err != nil {
+
+		// Channel to listen for interrupt signals
+		stop := make(chan os.Signal, 1)
+		signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
+
+		// Channel to notify when server exits
+		serverErrors := make(chan error, 1)
+
+		// Start server in a goroutine
+		go func() {
+			if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+				serverErrors <- err
+			}
+		}()
+
+		// Wait for interrupt signal or server error
+		select {
+		case err := <-serverErrors:
+			slog.Error("Server failed to start", "error", err)
 			panic(err)
+		case sig := <-stop:
+			slog.Info("Received shutdown signal", "signal", sig)
+
+			// Create a context with 5-second timeout for graceful shutdown
+			shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+
+			slog.Info("Shutting down server gracefully (timeout: 5s)...")
+			if err := httpServer.Shutdown(shutdownCtx); err != nil {
+				slog.Error("Server forced to shutdown", "error", err)
+				panic(err)
+			}
+			slog.Info("Server stopped gracefully")
 		}
 	} else {
 		if err := server.Run(ctx, &mcp.StdioTransport{}); err != nil {

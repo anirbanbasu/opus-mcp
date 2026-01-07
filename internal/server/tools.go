@@ -7,6 +7,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+
 	"opus-mcp/internal/parser"
 
 	"github.com/google/jsonschema-go/jsonschema"
@@ -86,23 +87,21 @@ func (t *ArxivWrapper) CategoryFetchLatest(ctx context.Context, req *mcp.CallToo
 	// Fetch contents from arXiv API
 	url := arxivApiEndpoint + "?search_query=" + searchQuery + "&start=" + fmt.Sprint(input.StartIndex) + "&max_results=" + fmt.Sprint(input.FetchSize) + "&sortBy=submittedDate&sortOrder=descending"
 	slog.Info("Fetching Atom feed from arXiv", "url", url)
+	// #nosec G107 -- URL is constructed from constant arxivApiEndpoint, query params are safe
 	resp, err := http.Get(url)
 	if err != nil {
-		// slog.Warn("failed to fetch from arXiv", "error", err)
 		return mcp_tool_errorf("failed to fetch from arXiv: %v", err), nil
 	}
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		// slog.Warn("failed to read response body", "error", err)
 		return mcp_tool_errorf("failed to read response body: %v", err), nil
 	}
 
 	fp := gofeed.NewParser()
 	output, err := fp.ParseString(string(body))
 	if err != nil {
-		// slog.Warn("failed to parse feed", "error", err)
 		return mcp_tool_errorf("failed to parse feed: %v", err), nil
 	}
 

@@ -41,11 +41,5 @@ severity:
   default: error
   rules:
     - linters:
-        - gofmt
-        - goimports
         - intrange
       severity: info
-formatters:
-  enable:
-    - gofmt
-    - gofumpt
