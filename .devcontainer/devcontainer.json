@@ -1,0 +1,59 @@
+{
+    "name": "Opus MCP Go Development",
+    "image": "mcr.microsoft.com/devcontainers/go:1-1.25-trixie",
+    "features": {
+        "ghcr.io/devcontainers/features/common-utils:2": {
+            "installZsh": true,
+            "installOhMyZsh": true,
+            "upgradePackages": true,
+            "username": "vscode",
+            "userUid": "automatic",
+            "userGid": "automatic"
+        },
+        "ghcr.io/devcontainers/features/git:1": {
+            "version": "latest",
+            "ppa": false
+        }
+    },
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "golang.go",
+                "GitHub.copilot",
+                "GitHub.copilot-chat",
+                "eamodio.gitlens",
+                "streetsidesoftware.code-spell-checker"
+            ],
+            "settings": {
+                "go.useLanguageServer": true,
+                "go.toolsManagement.autoUpdate": true,
+                "go.lintTool": "golangci-lint",
+                "go.lintOnSave": "workspace",
+                "go.formatTool": "gofumpt",
+                "[go]": {
+                    "editor.formatOnSave": true,
+                    "editor.codeActionsOnSave": {
+                        "source.organizeImports": "explicit"
+                    }
+                },
+                "gopls": {
+                    "formatting.gofumpt": true
+                }
+            }
+        }
+    },
+    "postCreateCommand": "bash .devcontainer/setup.sh",
+    "remoteUser": "vscode",
+    "mounts": [
+        "source=${localEnv:HOME}/.gitconfig,target=/home/vscode/.gitconfig,type=bind,consistency=cached"
+    ],
+    "forwardPorts": [
+        8000
+    ],
+    "portsAttributes": {
+        "8000": {
+            "label": "MCP HTTP Server",
+            "onAutoForward": "notify"
+        }
+    }
+}
