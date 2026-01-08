@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"reflect"
 	"runtime"
 	"syscall"
 	"time"
@@ -16,6 +17,8 @@ import (
 	"opus-mcp/internal/metadata"
 
 	"github.com/google/jsonschema-go/jsonschema"
+	"github.com/mmcdole/gofeed"
+	ext "github.com/mmcdole/gofeed/extensions"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -124,54 +127,75 @@ func runServer(transport_flag string, server_host string, server_port int, state
 		server.AddReceivingMiddleware(createMCPLoggingMiddleware())
 	}
 
-	var (
-		inputSchema = &jsonschema.Schema{
-			Type: "object",
-			Properties: map[string]*jsonschema.Schema{
-				"category": {
-					Description: "Expression of arXiv categories with boolean operators.",
-					Examples:    []any{"cs.AI", "cs.LG not cs.CV not cs.RO", "cs.AI + cs.LG - cs.CV", "cs.AI or (cs.LG not cs.CV)"},
-					Type:        "string",
-					Items: &jsonschema.Schema{
-						Type: "string",
-					},
-				},
-				"startIndex": {
-					Description: "The starting index for fetching results (0-based)",
-					Type:        "integer",
-					Minimum:     jsonschema.Ptr(0.0),
-					Default:     json.RawMessage([]byte(`0`)),
-				},
-				"fetchSize": {
-					Description: "Number of results to fetch (min: 1, max: 100)",
-					Type:        "integer",
-					Minimum:     jsonschema.Ptr(1.0),
-					Maximum:     jsonschema.Ptr(100.0),
-					Default:     json.RawMessage([]byte(`10`)),
+	categoryFetchLatestInputSchema := &jsonschema.Schema{
+		Type: "object",
+		Properties: map[string]*jsonschema.Schema{
+			"category": {
+				Description: "Expression of arXiv categories with boolean operators.",
+				Examples:    []any{"cs.AI", "cs.LG not cs.CV not cs.RO", "cs.AI + cs.LG - cs.CV", "cs.AI or (cs.LG not cs.CV)"},
+				Type:        "string",
+				Items: &jsonschema.Schema{
+					Type: "string",
 				},
 			},
-			Required: []string{"category"},
-		}
-		// TODO: This output schema definition is wrong although this works! Need to fix it later.
-		outputSchema = &jsonschema.Schema{
-			Type:       "object",
-			Properties: map[string]*jsonschema.Schema{},
-		}
-		// outputSchema, err = jsonschema.ForType(&gofeed.FeedType, nil)
-	)
-	categoryHandler, err := NewArxivToolHandler(inputSchema, outputSchema, categoryFetchLatestLogic)
+			"startIndex": {
+				Description: "The starting index for fetching results (0-based)",
+				Type:        "integer",
+				Minimum:     jsonschema.Ptr(0.0),
+				Default:     json.RawMessage([]byte(`0`)),
+			},
+			"fetchSize": {
+				Description: "Number of results to fetch (min: 1, max: 100)",
+				Type:        "integer",
+				Minimum:     jsonschema.Ptr(1.0),
+				Maximum:     jsonschema.Ptr(100.0),
+				Default:     json.RawMessage([]byte(`10`)),
+			},
+		},
+		Required: []string{"category"},
+	}
+
+	// Generate output schema from gofeed.Feed structure using reflection
+	// Handle circular references by providing simplified schemas for problematic types
+	categoryFetchLatestOutputSchema, err := jsonschema.ForType(reflect.TypeFor[gofeed.Feed](), &jsonschema.ForOptions{
+		TypeSchemas: map[reflect.Type]*jsonschema.Schema{
+			// Break the cycle in ITunesCategory
+			reflect.TypeFor[ext.ITunesCategory](): {
+				Type:        "object",
+				Description: "iTunes category (circular reference simplified)",
+				Properties: map[string]*jsonschema.Schema{
+					"text":        {Type: "string"},
+					"subcategory": {Type: "object", Description: "Nested subcategory"},
+				},
+			},
+			// Break the cycle in Extension
+			reflect.TypeFor[ext.Extension](): {
+				Type:        "object",
+				Description: "Generic extension (circular reference simplified)",
+				AdditionalProperties: &jsonschema.Schema{
+					Type: "string",
+				},
+			},
+		},
+	})
+	if err != nil {
+		slog.Error("failed to reflect output schema from gofeed.Feed", "error", err)
+		return
+	}
+
+	categoryFetchLatestHandler, err := NewArxivToolHandler(categoryFetchLatestInputSchema, categoryFetchLatestOutputSchema, categoryFetchLatestLogic)
 	if err != nil {
 		slog.Error("failed to create category fetch handler", "error", err)
 		return
 	}
-	slog.Info("category fetch handler created successfully", "schema_id", categoryHandler.inputSchema.Schema().ID)
+	slog.Info("category fetch handler created successfully", "schema_id", categoryFetchLatestHandler.inputSchema.Schema().ID)
 
 	server.AddTool(&mcp.Tool{
 		Name:         "arxiv_category_fetch_latest",
 		Description:  "Fetch latest publications from arXiv by category. See https://arxiv.org/category_taxonomy for valid categories.",
-		InputSchema:  inputSchema,
-		OutputSchema: outputSchema,
-	}, categoryHandler.Handle)
+		InputSchema:  categoryFetchLatestInputSchema,
+		OutputSchema: categoryFetchLatestOutputSchema,
+	}, categoryFetchLatestHandler.Handle)
 
 	// Category taxonomy tool
 	taxonomyInputSchema := &jsonschema.Schema{
@@ -197,7 +221,7 @@ func runServer(transport_flag string, server_host string, server_port int, state
 	slog.Info("category taxonomy handler created successfully")
 
 	server.AddTool(&mcp.Tool{
-		Name:         "arxiv_fetch_category_taxonomy",
+		Name:         "arxiv_get_category_taxonomy",
 		Description:  "Fetch the complete arXiv category taxonomy. Returns a nested structure with broad areas (e.g., 'cs') mapping to specific categories (e.g., 'cs.AI') with their descriptions. Data is fetched fresh from https://arxiv.org/category_taxonomy",
 		InputSchema:  taxonomyInputSchema,
 		OutputSchema: taxonomyOutputSchema,
