@@ -6,11 +6,13 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"strings"
 	"time"
 
 	"opus-mcp/internal"
 	"opus-mcp/internal/parser"
 
+	"github.com/PuerkitoBio/goquery"
 	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/mmcdole/gofeed"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -135,7 +137,6 @@ func categoryFetchLatestLogic(ctx context.Context, input json.RawMessage) (any, 
 	// Fetch contents from arXiv API
 	url := arxivApiEndpoint + "?search_query=" + searchQuery + "&start=" + fmt.Sprint(args.StartIndex) + "&max_results=" + fmt.Sprint(args.FetchSize) + "&sortBy=submittedDate&sortOrder=descending"
 	slog.Info("Fetching Atom feed from arXiv", "url", url)
-	// #nosec G107 -- URL is constructed from constant arxivApiEndpoint, query params are safe
 	resp, err := httpClient.Get(url)
 	if err != nil {
 		// Return error immediately - no retry logic
@@ -156,6 +157,93 @@ func categoryFetchLatestLogic(ctx context.Context, input json.RawMessage) (any, 
 	}
 
 	return output, nil
+}
+
+// fetchCategoryTaxonomyLogic fetches and parses the arXiv category taxonomy from the web.
+// Returns a nested map structure where the top level contains broad areas (e.g., "cs" for Computer Science)
+// and each area maps to a map of specific categories (e.g., "cs.AI") to their descriptions.
+func fetchCategoryTaxonomyLogic(ctx context.Context, input json.RawMessage) (any, error) {
+	const taxonomyURL = "https://arxiv.org/category_taxonomy"
+
+	slog.Info("Fetching arXiv category taxonomy", "url", taxonomyURL)
+	resp, err := httpClient.Get(taxonomyURL)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch taxonomy: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		return nil, fmt.Errorf("failed to fetch taxonomy: HTTP %d", resp.StatusCode)
+	}
+
+	// Parse HTML using goquery
+	doc, err := goquery.NewDocumentFromReader(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse HTML: %w", err)
+	}
+
+	// Result structure: map[area]map[category]description
+	// e.g., {"cs": {"cs.AI": "Artificial Intelligence description...", ...}}
+	taxonomy := make(map[string]map[string]string)
+
+	// Find all accordion sections (each represents a broad area like "Computer Science")
+	doc.Find("h2.accordion-head").Each(func(i int, areaHeading *goquery.Selection) {
+		// Get the accordion body (contains all categories for this area)
+		accordionBody := areaHeading.Next()
+
+		// Create a map for this area's categories
+		categories := make(map[string]string)
+
+		// Find all category entries within this area
+		accordionBody.Find("h4").Each(func(j int, categoryHeading *goquery.Selection) {
+			// Extract category code and name from h4
+			// Format: "cs.AI <span>(Artificial Intelligence)</span>"
+			fullText := categoryHeading.Text()
+
+			// Split to get the category code (e.g., "cs.AI")
+			parts := strings.Fields(fullText)
+			if len(parts) < 1 {
+				return
+			}
+			categoryCode := parts[0]
+
+			// Extract the category name from the span
+			categoryName := strings.TrimSpace(categoryHeading.Find("span").Text())
+			// Remove parentheses if present
+			categoryName = strings.Trim(categoryName, "()")
+
+			// Get the description from the next column
+			descriptionDiv := categoryHeading.Parent().Next()
+			description := strings.TrimSpace(descriptionDiv.Find("p").Text())
+
+			// Combine name and description
+			fullDescription := categoryName
+			if description != "" {
+				fullDescription = categoryName + ": " + description
+			}
+
+			categories[categoryCode] = fullDescription
+		})
+
+		// Only add if we found categories
+		if len(categories) > 0 {
+			// Extract area code from first category (e.g., "cs" from "cs.AI")
+			for catCode := range categories {
+				areaParts := strings.Split(catCode, ".")
+				if len(areaParts) > 0 {
+					areaCode := areaParts[0]
+					taxonomy[areaCode] = categories
+					break
+				}
+			}
+		}
+	})
+
+	if len(taxonomy) == 0 {
+		return nil, fmt.Errorf("no categories found in taxonomy")
+	}
+
+	return taxonomy, nil
 }
 
 // Example: To add a new tool like AuthorFetchLatest, follow this pattern:

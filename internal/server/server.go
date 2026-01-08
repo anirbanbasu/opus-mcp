@@ -173,6 +173,36 @@ func runServer(transport_flag string, server_host string, server_port int, state
 		OutputSchema: outputSchema,
 	}, categoryHandler.Handle)
 
+	// Category taxonomy tool
+	taxonomyInputSchema := &jsonschema.Schema{
+		Type:       "object",
+		Properties: map[string]*jsonschema.Schema{},
+	}
+	taxonomyOutputSchema := &jsonschema.Schema{
+		Type: "object",
+		Description: "A nested map structure where each key is a broad area code (e.g., 'cs' for Computer Science) " +
+			"and each value is a map of category codes (e.g., 'cs.AI') to their full descriptions.",
+		AdditionalProperties: &jsonschema.Schema{
+			Type: "object",
+			AdditionalProperties: &jsonschema.Schema{
+				Type: "string",
+			},
+		},
+	}
+	taxonomyHandler, err := NewArxivToolHandler(taxonomyInputSchema, taxonomyOutputSchema, fetchCategoryTaxonomyLogic)
+	if err != nil {
+		slog.Error("failed to create category taxonomy handler", "error", err)
+		return
+	}
+	slog.Info("category taxonomy handler created successfully")
+
+	server.AddTool(&mcp.Tool{
+		Name:         "arxiv_fetch_category_taxonomy",
+		Description:  "Fetch the complete arXiv category taxonomy. Returns a nested structure with broad areas (e.g., 'cs') mapping to specific categories (e.g., 'cs.AI') with their descriptions. Data is fetched fresh from https://arxiv.org/category_taxonomy",
+		InputSchema:  taxonomyInputSchema,
+		OutputSchema: taxonomyOutputSchema,
+	}, taxonomyHandler.Handle)
+
 	if transport_flag == "http" {
 		// Start HTTP server
 		mcpHandler := mcp.NewStreamableHTTPHandler(func(r *http.Request) *mcp.Server {
