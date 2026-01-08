@@ -2,17 +2,13 @@ package server
 
 import (
 	"context"
-	"crypto/tls"
-	"crypto/x509"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
-	"net/http"
-	"net/url"
-	"os"
 	"time"
 
+	"opus-mcp/internal"
 	"opus-mcp/internal/parser"
 
 	"github.com/google/jsonschema-go/jsonschema"
@@ -28,127 +24,7 @@ const arxivApiEndpoint string = "https://export.arxiv.org/api/query"
 var arxivRateLimiter = rate.NewLimiter(rate.Every(3*time.Second), 1)
 
 // httpClient is a configured HTTP client with proxy and TLS support
-var httpClient = createConfiguredHTTPClient()
-
-// createConfiguredHTTPClient creates an HTTP client with proxy support and custom TLS configuration.
-// It respects standard proxy environment variables (HTTP_PROXY, HTTPS_PROXY, NO_PROXY) and
-// supports custom CA certificates via SSL_CERT_FILE or REQUESTS_CA_BUNDLE environment variables.
-// If OPUS_MCP_INSECURE_SKIP_VERIFY=true is set, certificate verification will be disabled (⚠️ INSECURE).
-func createConfiguredHTTPClient() *http.Client {
-	// Setup TLS config
-	tlsConfig := &tls.Config{
-		MinVersion: tls.VersionTLS12, // Enforce minimum TLS 1.2
-	}
-
-	// Load custom CAs if specified
-	if customCA := loadCustomCABundle(); customCA != nil {
-		tlsConfig.RootCAs = customCA
-	}
-
-	// Check for insecure mode
-	if shouldSkipTLSVerification() {
-		tlsConfig.InsecureSkipVerify = true
-		slog.Warn("🚨 SECURITY WARNING: TLS certificate verification is DISABLED (InsecureSkipVerify=true)")
-	}
-
-	// Create transport with proxy support
-	transport := &http.Transport{
-		Proxy:               http.ProxyFromEnvironment,
-		TLSClientConfig:     tlsConfig,
-		MaxIdleConns:        10,
-		IdleConnTimeout:     30 * time.Second,
-		TLSHandshakeTimeout: 10 * time.Second,
-	}
-
-	// Log proxy configuration if set (with credentials removed)
-	if proxy := os.Getenv("HTTP_PROXY"); proxy != "" {
-		slog.Info("Using HTTP proxy", "proxy", sanitizeProxyURL(proxy))
-	} else if proxy := os.Getenv("http_proxy"); proxy != "" {
-		slog.Info("Using HTTP proxy", "proxy", sanitizeProxyURL(proxy))
-	}
-
-	if proxy := os.Getenv("HTTPS_PROXY"); proxy != "" {
-		slog.Info("Using HTTPS proxy", "proxy", sanitizeProxyURL(proxy))
-	} else if proxy := os.Getenv("https_proxy"); proxy != "" {
-		slog.Info("Using HTTPS proxy", "proxy", sanitizeProxyURL(proxy))
-	}
-
-	return &http.Client{
-		Transport: transport,
-		Timeout:   30 * time.Second, // Overall request timeout
-	}
-}
-
-// loadCustomCABundle loads custom CA certificates from environment-specified paths.
-// It checks SSL_CERT_FILE, REQUESTS_CA_BUNDLE, and CURL_CA_BUNDLE in that order.
-// Returns a cert pool with system CAs plus any custom CAs found, or nil if none specified.
-func loadCustomCABundle() *x509.CertPool {
-	// Start with system's trusted CAs
-	rootCAs, err := x509.SystemCertPool()
-	if err != nil {
-		slog.Warn("Failed to load system cert pool, creating new one", "error", err)
-		rootCAs = x509.NewCertPool()
-	}
-
-	// Check environment variables for custom CA paths
-	caPaths := []struct {
-		envVar string
-		path   string
-	}{
-		{"SSL_CERT_FILE", os.Getenv("SSL_CERT_FILE")},
-		{"REQUESTS_CA_BUNDLE", os.Getenv("REQUESTS_CA_BUNDLE")},
-		{"CURL_CA_BUNDLE", os.Getenv("CURL_CA_BUNDLE")},
-	}
-
-	loadedAny := false
-	for _, ca := range caPaths {
-		if ca.path != "" {
-			if caCert, err := os.ReadFile(ca.path); err == nil {
-				if rootCAs.AppendCertsFromPEM(caCert) {
-					slog.Info("Loaded custom CA certificate", "env_var", ca.envVar, "path", ca.path)
-					loadedAny = true
-				} else {
-					slog.Warn("Failed to parse CA certificate", "env_var", ca.envVar, "path", ca.path)
-				}
-			} else {
-				slog.Warn("Failed to load CA certificate file", "env_var", ca.envVar, "path", ca.path, "error", err)
-			}
-		}
-	}
-
-	if loadedAny {
-		return rootCAs
-	}
-	return nil // Use default system CAs
-}
-
-// shouldSkipTLSVerification checks if TLS certificate verification should be disabled.
-// Returns true only if OPUS_MCP_INSECURE_SKIP_VERIFY environment variable is explicitly set to "true".
-// ⚠️ WARNING: Disabling verification is insecure and should only be used in development/testing.
-func shouldSkipTLSVerification() bool {
-	return os.Getenv("OPUS_MCP_INSECURE_SKIP_VERIFY") == "true"
-}
-
-// sanitizeProxyURL removes username and password from a proxy URL before logging.
-// This prevents credentials from being exposed in logs.
-func sanitizeProxyURL(proxyURL string) string {
-	if proxyURL == "" {
-		return ""
-	}
-
-	parsed, err := url.Parse(proxyURL)
-	if err != nil {
-		// If we can't parse it, return a safe placeholder
-		return "<invalid-url>"
-	}
-
-	// Remove user info if present
-	if parsed.User != nil {
-		parsed.User = url.UserPassword("***", "***")
-	}
-
-	return parsed.String()
-}
+var httpClient = internal.CreateConfiguredHTTPClient()
 
 func mcp_tool_errorf(format string, args ...any) *mcp.CallToolResult {
 	slog.Warn(fmt.Sprintf(format, args...))
