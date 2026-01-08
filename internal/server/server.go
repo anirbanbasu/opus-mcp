@@ -159,19 +159,19 @@ func runServer(transport_flag string, server_host string, server_port int, state
 		}
 		// outputSchema, err = jsonschema.ForType(&gofeed.FeedType, nil)
 	)
-	arxivWrapper, err := NewArxivWrapper(inputSchema, outputSchema)
+	categoryHandler, err := NewArxivToolHandler(inputSchema, outputSchema, categoryFetchLatestLogic)
 	if err != nil {
-		slog.Error("failed to create ArxivWrapper", "error", err)
+		slog.Error("failed to create category fetch handler", "error", err)
 		return
 	}
-	slog.Info("arxivWrapper created successfully" + arxivWrapper.inputSchema.Schema().ID)
+	slog.Info("category fetch handler created successfully", "schema_id", categoryHandler.inputSchema.Schema().ID)
 
 	server.AddTool(&mcp.Tool{
 		Name:         "arxiv_category_fetch_latest",
 		Description:  "Fetch latest publications from arXiv by category. See https://arxiv.org/category_taxonomy for valid categories.",
 		InputSchema:  inputSchema,
 		OutputSchema: outputSchema,
-	}, arxivWrapper.CategoryFetchLatest)
+	}, categoryHandler.Handle)
 
 	if transport_flag == "http" {
 		// Start HTTP server
