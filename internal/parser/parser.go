@@ -54,7 +54,7 @@ type parser struct {
 	pos    int
 }
 
-func (p *parser) parseExpression() (string, error) {
+func (p *parser) parseExpression(tokenPrefix, tokenSuffix string) (string, error) {
 	var parts []string
 
 	for p.pos < len(p.tokens) {
@@ -68,7 +68,10 @@ func (p *parser) parseExpression() (string, error) {
 		// token is also a term (ident or '('), insert an implicit "AND".
 		if len(parts) > 0 {
 			last := parts[len(parts)-1]
-			isLastTerm := strings.HasPrefix(last, "cat:") || strings.HasSuffix(last, ")")
+			// Check if last part is a term: either an identifier (with prefix/suffix) or a closing paren
+			isLastIdent := !isOperator(last) && !strings.HasPrefix(last, "(")
+			isLastClosingParen := strings.HasSuffix(last, ")")
+			isLastTerm := isLastIdent || isLastClosingParen
 			isCurrTerm := tok.Type == tokenIdent || tok.Type == tokenLParen
 
 			if isLastTerm && isCurrTerm {
@@ -79,13 +82,13 @@ func (p *parser) parseExpression() (string, error) {
 		p.pos++
 		switch tok.Type {
 		case tokenLParen:
-			expr, err := p.parseExpression()
+			expr, err := p.parseExpression(tokenPrefix, tokenSuffix)
 			if err != nil {
 				return "", err
 			}
 			parts = append(parts, "("+expr+")")
 		case tokenIdent:
-			parts = append(parts, "cat:"+tok.Value)
+			parts = append(parts, tokenPrefix+tok.Value+tokenSuffix)
 		case tokenAnd, tokenOr, tokenNot:
 			parts = append(parts, tok.Value)
 		}
@@ -102,10 +105,19 @@ func (p *parser) parseExpression() (string, error) {
 	return result, nil
 }
 
+// isOperator checks if a string is an operator
+func isOperator(s string) bool {
+	return s == "AND" || s == "OR" || s == "NOT"
+}
+
 func ParseReconstructCategoryExpression(input string) (string, error) {
+	return ParseReconstructGeneralExpression(input, "cat:", "")
+}
+
+func ParseReconstructGeneralExpression(input, prefix, suffix string) (string, error) {
 	tokens := lex(input)
 	p := &parser{tokens: tokens}
-	expr, err := p.parseExpression()
+	expr, err := p.parseExpression(prefix, suffix)
 	if err != nil {
 		return "", err
 	}
