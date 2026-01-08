@@ -183,7 +183,7 @@ func runServer(transport_flag string, server_host string, server_port int, state
 		return
 	}
 
-	categoryFetchLatestHandler, err := NewArxivToolHandler(categoryFetchLatestInputSchema, categoryFetchLatestOutputSchema, categoryFetchLatestLogic)
+	categoryFetchLatestHandler, err := NewArxivToolHandler(categoryFetchLatestInputSchema, categoryFetchLatestOutputSchema, categoryFetchLatest)
 	if err != nil {
 		slog.Error("failed to create category fetch handler", "error", err)
 		return
@@ -213,7 +213,7 @@ func runServer(transport_flag string, server_host string, server_port int, state
 			},
 		},
 	}
-	taxonomyHandler, err := NewArxivToolHandler(taxonomyInputSchema, taxonomyOutputSchema, fetchCategoryTaxonomyLogic)
+	taxonomyHandler, err := NewArxivToolHandler(taxonomyInputSchema, taxonomyOutputSchema, fetchCategoryTaxonomy)
 	if err != nil {
 		slog.Error("failed to create category taxonomy handler", "error", err)
 		return

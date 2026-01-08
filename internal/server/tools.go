@@ -112,11 +112,11 @@ func (h *ArxivToolHandler) Handle(ctx context.Context, req *mcp.CallToolRequest)
 	}, nil
 }
 
-// categoryFetchLatestLogic contains the business logic for fetching latest publications by category.
+// categoryFetchLatest contains the business logic for fetching latest publications by category.
 // This function does NOT retry on errors - it returns errors immediately to comply with arXiv API
 // terms of use. Rate limiting is enforced to ensure max 1 request per 3 seconds.
 // See: https://info.arxiv.org/help/api/tou.html
-func categoryFetchLatestLogic(ctx context.Context, input json.RawMessage) (any, error) {
+func categoryFetchLatest(ctx context.Context, input json.RawMessage) (any, error) {
 	var args ArxivCategoryFetchLatestArgs
 	if err := json.Unmarshal(input, &args); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal arguments: %w", err)
@@ -159,10 +159,33 @@ func categoryFetchLatestLogic(ctx context.Context, input json.RawMessage) (any, 
 	return output, nil
 }
 
-// fetchCategoryTaxonomyLogic fetches and parses the arXiv category taxonomy from the web.
+// deriveAreaCode converts arXiv area names to their standard codes
+// e.g., "Computer Science" → "cs", "Physics" → "physics"
+func deriveAreaCode(areaName string) string {
+	// Map of known area names to their codes
+	areaMap := map[string]string{
+		"Computer Science":          "cs",
+		"Economics":                 "econ",
+		"Electrical Engineering and Systems Science": "eess",
+		"Mathematics":               "math",
+		"Physics":                   "physics",
+		"Quantitative Biology":      "q-bio",
+		"Quantitative Finance":      "q-fin",
+		"Statistics":                "stat",
+	}
+
+	if code, ok := areaMap[areaName]; ok {
+		return code
+	}
+
+	// Fallback: convert to lowercase and remove spaces
+	return strings.ToLower(strings.ReplaceAll(areaName, " ", "-"))
+}
+
+// fetchCategoryTaxonomy fetches and parses the arXiv category taxonomy from the web.
 // Returns a nested map structure where the top level contains broad areas (e.g., "cs" for Computer Science)
 // and each area maps to a map of specific categories (e.g., "cs.AI") to their descriptions.
-func fetchCategoryTaxonomyLogic(ctx context.Context, input json.RawMessage) (any, error) {
+func fetchCategoryTaxonomy(ctx context.Context, input json.RawMessage) (any, error) {
 	const taxonomyURL = "https://arxiv.org/category_taxonomy"
 
 	slog.Info("Fetching arXiv category taxonomy", "url", taxonomyURL)
@@ -190,6 +213,11 @@ func fetchCategoryTaxonomyLogic(ctx context.Context, input json.RawMessage) (any
 	doc.Find("h2.accordion-head").Each(func(i int, areaHeading *goquery.Selection) {
 		// Get the accordion body (contains all categories for this area)
 		accordionBody := areaHeading.Next()
+
+		// Extract area name from the heading and derive area code
+		// Heading format: "Computer Science" → "cs", "Physics" → "physics", etc.
+		areaName := strings.TrimSpace(areaHeading.Text())
+		areaCode := deriveAreaCode(areaName)
 
 		// Create a map for this area's categories
 		categories := make(map[string]string)
@@ -227,15 +255,7 @@ func fetchCategoryTaxonomyLogic(ctx context.Context, input json.RawMessage) (any
 
 		// Only add if we found categories
 		if len(categories) > 0 {
-			// Extract area code from first category (e.g., "cs" from "cs.AI")
-			for catCode := range categories {
-				areaParts := strings.Split(catCode, ".")
-				if len(areaParts) > 0 {
-					areaCode := areaParts[0]
-					taxonomy[areaCode] = categories
-					break
-				}
-			}
+			taxonomy[areaCode] = categories
 		}
 	})
 
