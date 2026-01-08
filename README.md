@@ -10,6 +10,38 @@ You'll need:
 - Go 1.25.5 or later
 - [`just`](https://github.com/casey/just?tab=readme-ov-file#installation) - command runner
 
+### Environment Variables
+
+The server supports the following environment variables for network and security configuration:
+
+#### Proxy Configuration
+
+- `HTTP_PROXY` / `http_proxy` - HTTP proxy URL (e.g., `http://proxy.company.com:8080`)
+- `HTTPS_PROXY` / `https_proxy` - HTTPS proxy URL (e.g., `http://proxy.company.com:8080`)
+- `NO_PROXY` / `no_proxy` - Comma-separated list of hosts to bypass proxy (e.g., `localhost,127.0.0.1,.local`)
+
+#### TLS/SSL Configuration
+
+- `SSL_CERT_FILE` - Path to custom CA certificate bundle (PEM format)
+- `REQUESTS_CA_BUNDLE` - Alternative path to CA bundle (Python `requests` library compatibility)
+- `CURL_CA_BUNDLE` - Alternative path to CA bundle (cURL compatibility)
+- `OPUS_MCP_INSECURE_SKIP_VERIFY` - Set to `true` to skip TLS certificate verification (⚠️ **INSECURE** - only for development/testing)
+
+#### Example Usage
+
+```bash
+# Using a corporate proxy with custom CA certificate
+export HTTPS_PROXY=http://proxy.company.com:8080
+export SSL_CERT_FILE=/path/to/company-ca-bundle.crt
+just run-http
+
+# Skip certificate verification for testing (NOT RECOMMENDED FOR PRODUCTION)
+export OPUS_MCP_INSECURE_SKIP_VERIFY=true
+just run-http
+```
+
+⚠️ **Security Warning**: Never use `OPUS_MCP_INSECURE_SKIP_VERIFY=true` in production environments. This disables certificate verification and makes your connections vulnerable to man-in-the-middle attacks.
+
 ### Running the Server
 
 ```bash
