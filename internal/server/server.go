@@ -22,8 +22,6 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// var BuildVersion string = "uninitialised; use -ldflags `-X main.Version=1.0.0`" // Define BuildVersion as a global variable
-
 var serverProcessStartTime time.Time
 
 func uptime() time.Duration {
@@ -106,27 +104,7 @@ func healthCheckHandler(w http.ResponseWriter, r *http.Request) {
 	slog.Debug("health check responded", "bytes_written", byteN)
 }
 
-func runServer(transport_flag string, server_host string, server_port int, stateless bool, enableRequestResponseLogging bool) {
-	ctx := context.Background()
-	server := mcp.NewServer(
-		&mcp.Implementation{
-			Name:       metadata.APP_NAME,
-			Title:      metadata.APP_TITLE,
-			WebsiteURL: "https://github.com/anirbanbasu/opus-mcp",
-			// Use -ldflags to set the version at build time.
-			Version: metadata.BuildVersion,
-		},
-		&mcp.ServerOptions{
-			// Disable logging capability to prevent setLevel errors during initialization
-			Capabilities: &mcp.ServerCapabilities{},
-		},
-	)
-	if enableRequestResponseLogging {
-		// Add MCP-level logging middleware.
-		slog.Info("Server request response logging has been enabled.")
-		server.AddReceivingMiddleware(createMCPLoggingMiddleware())
-	}
-
+func addMCPTools(server *mcp.Server) error {
 	categoryFetchLatestInputSchema := &jsonschema.Schema{
 		Type: "object",
 		Properties: map[string]*jsonschema.Schema{
@@ -179,14 +157,12 @@ func runServer(transport_flag string, server_host string, server_port int, state
 		},
 	})
 	if err != nil {
-		slog.Error("failed to reflect output schema from gofeed.Feed", "error", err)
-		return
+		return fmt.Errorf("failed to reflect output schema from gofeed.Feed: %w", err)
 	}
 
 	categoryFetchLatestHandler, err := NewArxivToolHandler(categoryFetchLatestInputSchema, categoryFetchLatestOutputSchema, categoryFetchLatest)
 	if err != nil {
-		slog.Error("failed to create category fetch handler", "error", err)
-		return
+		return fmt.Errorf("failed to create category fetch latest handler: %w", err)
 	}
 	slog.Info("category fetch handler created successfully", "schema_id", categoryFetchLatestHandler.inputSchema.Schema().ID)
 
@@ -205,13 +181,11 @@ func runServer(transport_flag string, server_host string, server_port int, state
 	// Generate output schema from Taxonomy structure using reflection
 	taxonomyOutputSchema, err := jsonschema.ForType(reflect.TypeFor[Taxonomy](), &jsonschema.ForOptions{})
 	if err != nil {
-		slog.Error("failed to reflect output schema from Taxonomy", "error", err)
-		return
+		return fmt.Errorf("failed to reflect output schema from Taxonomy: %w", err)
 	}
 	taxonomyHandler, err := NewArxivToolHandler(taxonomyInputSchema, taxonomyOutputSchema, fetchCategoryTaxonomy)
 	if err != nil {
-		slog.Error("failed to create category taxonomy handler", "error", err)
-		return
+		return fmt.Errorf("failed to create category taxonomy handler: %w", err)
 	}
 	slog.Info("category taxonomy handler created successfully")
 
@@ -221,6 +195,37 @@ func runServer(transport_flag string, server_host string, server_port int, state
 		InputSchema:  taxonomyInputSchema,
 		OutputSchema: taxonomyOutputSchema,
 	}, taxonomyHandler.Handle)
+
+	return nil
+}
+
+func runServer(transport_flag string, server_host string, server_port int, stateless bool, enableRequestResponseLogging bool) {
+	ctx := context.Background()
+	server := mcp.NewServer(
+		&mcp.Implementation{
+			Name:       metadata.APP_NAME,
+			Title:      metadata.APP_TITLE,
+			WebsiteURL: "https://github.com/anirbanbasu/opus-mcp",
+			// Use -ldflags to set the version at build time.
+			Version: metadata.BuildVersion,
+		},
+		&mcp.ServerOptions{
+			// Disable logging capability to prevent setLevel errors during initialization
+			Capabilities: &mcp.ServerCapabilities{},
+		},
+	)
+	if enableRequestResponseLogging {
+		// Add MCP-level logging middleware.
+		slog.Info("Server request response logging has been enabled.")
+		server.AddReceivingMiddleware(createMCPLoggingMiddleware())
+	}
+
+	// Add MCP tools
+	if err := addMCPTools(server); err != nil {
+		slog.Error("failed to add MCP tools", "error", err)
+		// Should we panic here?
+	}
+	slog.Info("MCP tools added successfully")
 
 	if transport_flag == "http" {
 		// Start HTTP server
