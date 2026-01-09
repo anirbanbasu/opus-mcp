@@ -202,16 +202,11 @@ func runServer(transport_flag string, server_host string, server_port int, state
 		Type:       "object",
 		Properties: map[string]*jsonschema.Schema{},
 	}
-	taxonomyOutputSchema := &jsonschema.Schema{
-		Type: "object",
-		Description: "A nested map structure where each key is a broad area code (e.g., 'cs' for Computer Science) " +
-			"and each value is a map of category codes (e.g., 'cs.AI') to their full descriptions.",
-		AdditionalProperties: &jsonschema.Schema{
-			Type: "object",
-			AdditionalProperties: &jsonschema.Schema{
-				Type: "string",
-			},
-		},
+	// Generate output schema from Taxonomy structure using reflection
+	taxonomyOutputSchema, err := jsonschema.ForType(reflect.TypeFor[Taxonomy](), &jsonschema.ForOptions{})
+	if err != nil {
+		slog.Error("failed to reflect output schema from Taxonomy", "error", err)
+		return
 	}
 	taxonomyHandler, err := NewArxivToolHandler(taxonomyInputSchema, taxonomyOutputSchema, fetchCategoryTaxonomy)
 	if err != nil {

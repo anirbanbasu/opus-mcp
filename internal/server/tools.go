@@ -159,19 +159,40 @@ func categoryFetchLatest(ctx context.Context, input json.RawMessage) (any, error
 	return output, nil
 }
 
+// Group represents an arXiv archive or subject group
+type Group struct {
+	Code           string `json:"code"`
+	Name           string `json:"name"`
+	Classification string `json:"classification"`        // broad area (e.g., "Computer Science", "Physics")
+	Description    string `json:"description,omitempty"` // optional
+}
+
+// Category represents an arXiv category with its metadata
+type Category struct {
+	Code        string `json:"code"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+}
+
+// Taxonomy represents the complete arXiv category taxonomy
+type Taxonomy struct {
+	Groups     map[string]Group    `json:"groups"`     // keyed by group code
+	Categories map[string]Category `json:"categories"` // keyed by category code
+}
+
 // deriveAreaCode converts arXiv area names to their standard codes
 // e.g., "Computer Science" → "cs", "Physics" → "physics"
 func deriveAreaCode(areaName string) string {
 	// Map of known area names to their codes
 	areaMap := map[string]string{
-		"Computer Science":          "cs",
-		"Economics":                 "econ",
+		"Computer Science": "cs",
+		"Economics":        "econ",
 		"Electrical Engineering and Systems Science": "eess",
-		"Mathematics":               "math",
-		"Physics":                   "physics",
-		"Quantitative Biology":      "q-bio",
-		"Quantitative Finance":      "q-fin",
-		"Statistics":                "stat",
+		"Mathematics":          "math",
+		"Physics":              "physics",
+		"Quantitative Biology": "q-bio",
+		"Quantitative Finance": "q-fin",
+		"Statistics":           "stat",
 	}
 
 	if code, ok := areaMap[areaName]; ok {
@@ -182,9 +203,19 @@ func deriveAreaCode(areaName string) string {
 	return strings.ToLower(strings.ReplaceAll(areaName, " ", "-"))
 }
 
+// deriveGroupCode extracts the group code from a category code
+// e.g., "cs.AI" → "cs", "astro-ph.CO" → "astro-ph", "hep-ph" → "hep-ph"
+func deriveGroupCode(categoryCode string) string {
+	// Find the first dot
+	if idx := strings.Index(categoryCode, "."); idx > 0 {
+		return categoryCode[:idx]
+	}
+	// No dot found, the entire code is the group
+	return categoryCode
+}
+
 // fetchCategoryTaxonomy fetches and parses the arXiv category taxonomy from the web.
-// Returns a nested map structure where the top level contains broad areas (e.g., "cs" for Computer Science)
-// and each area maps to a map of specific categories (e.g., "cs.AI") to their descriptions.
+// Returns a Taxonomy structure with groups and categories in a flattened format.
 func fetchCategoryTaxonomy(ctx context.Context, input json.RawMessage) (any, error) {
 	const taxonomyURL = "https://arxiv.org/category_taxonomy"
 
@@ -205,9 +236,13 @@ func fetchCategoryTaxonomy(ctx context.Context, input json.RawMessage) (any, err
 		return nil, fmt.Errorf("failed to parse HTML: %w", err)
 	}
 
-	// Result structure: map[area]map[category]description
-	// e.g., {"cs": {"cs.AI": "Artificial Intelligence description...", ...}}
-	taxonomy := make(map[string]map[string]string)
+	taxonomy := Taxonomy{
+		Groups:     make(map[string]Group),
+		Categories: make(map[string]Category),
+	}
+
+	// Track which groups we've seen to avoid duplicates
+	seenGroups := make(map[string]bool)
 
 	// Find all accordion sections (each represents a broad area like "Computer Science")
 	doc.Find("h2.accordion-head").Each(func(i int, areaHeading *goquery.Selection) {
@@ -215,12 +250,8 @@ func fetchCategoryTaxonomy(ctx context.Context, input json.RawMessage) (any, err
 		accordionBody := areaHeading.Next()
 
 		// Extract area name from the heading and derive area code
-		// Heading format: "Computer Science" → "cs", "Physics" → "physics", etc.
 		areaName := strings.TrimSpace(areaHeading.Text())
 		areaCode := deriveAreaCode(areaName)
-
-		// Create a map for this area's categories
-		categories := make(map[string]string)
 
 		// Find all category entries within this area
 		accordionBody.Find("h4").Each(func(j int, categoryHeading *goquery.Selection) {
@@ -244,22 +275,36 @@ func fetchCategoryTaxonomy(ctx context.Context, input json.RawMessage) (any, err
 			descriptionDiv := categoryHeading.Parent().Next()
 			description := strings.TrimSpace(descriptionDiv.Find("p").Text())
 
-			// Combine name and description
-			fullDescription := categoryName
-			if description != "" {
-				fullDescription = categoryName + ": " + description
+			// Derive group code from category code
+			groupCode := deriveGroupCode(categoryCode)
+
+			// Add group if not seen before
+			if !seenGroups[groupCode] {
+				seenGroups[groupCode] = true
+				// Determine group name
+				groupName := areaName
+				if groupCode != areaCode {
+					// This is a sub-group within the area, try to derive a better name
+					// For single-category groups (like "hep-ph"), use the category name
+					groupName = categoryName
+				}
+				taxonomy.Groups[groupCode] = Group{
+					Code:           groupCode,
+					Name:           groupName,
+					Classification: areaName,
+				}
 			}
 
-			categories[categoryCode] = fullDescription
+			// Add category
+			taxonomy.Categories[categoryCode] = Category{
+				Code:        categoryCode,
+				Name:        categoryName,
+				Description: description,
+			}
 		})
-
-		// Only add if we found categories
-		if len(categories) > 0 {
-			taxonomy[areaCode] = categories
-		}
 	})
 
-	if len(taxonomy) == 0 {
+	if len(taxonomy.Categories) == 0 {
 		return nil, fmt.Errorf("no categories found in taxonomy")
 	}
 

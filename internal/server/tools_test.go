@@ -21,59 +21,66 @@ func TestFetchCategoryTaxonomy(t *testing.T) {
 		t.Fatalf("failed to fetch taxonomy: %v", err)
 	}
 
-	taxonomy, ok := result.(map[string]map[string]string)
+	taxonomy, ok := result.(Taxonomy)
 	if !ok {
-		t.Fatalf("expected map[string]map[string]string, got %T", result)
+		t.Fatalf("expected Taxonomy, got %T", result)
 	}
 
 	// Verify we got reasonable data
-	if len(taxonomy) == 0 {
-		t.Fatal("taxonomy is empty")
+	if len(taxonomy.Groups) == 0 {
+		t.Fatal("taxonomy has no groups")
+	}
+	if len(taxonomy.Categories) == 0 {
+		t.Fatal("taxonomy has no categories")
 	}
 
-	// Test structure: each area should have at least one category
-	for areaCode, categories := range taxonomy {
-		if len(categories) == 0 {
-			t.Errorf("area %s has no categories", areaCode)
+	// Test structure: each category should have valid data
+	for catCode, category := range taxonomy.Categories {
+		// Each category should have a non-empty name
+		if category.Name == "" {
+			t.Errorf("category %s has empty name", catCode)
 		}
 
-		// Validate that category codes match the area
-		for catCode, desc := range categories {
-			// Each category should have a non-empty description
-			if desc == "" {
-				t.Errorf("category %s has empty description", catCode)
-			}
-
-			// Category codes should start with the area code (except for single-word categories like "econ")
-			// We're being lenient here since arXiv has various formats
-			if len(catCode) == 0 {
-				t.Errorf("found empty category code in area %s", areaCode)
-			}
+		// Category code should match the key
+		if category.Code != catCode {
+			t.Errorf("category %s has mismatched code %s", catCode, category.Code)
 		}
-	}
 
-	// Verify expected major areas exist
-	expectedAreas := map[string]int{
-		"cs":      30, // Computer Science should have at least 30 categories
-		"math":    25, // Mathematics should have at least 25 categories
-		"physics": 50, // Physics should have at least 50 categories
-		"q-bio":   5,  // Quantitative Biology should have at least 5 categories
-		"q-fin":   5,  // Quantitative Finance should have at least 5 categories
-		"stat":    5,  // Statistics should have at least 5 categories
-	}
-
-	for area, minCategories := range expectedAreas {
-		categories, ok := taxonomy[area]
-		if !ok {
-			t.Errorf("expected area %q not found in taxonomy", area)
-			continue
-		}
-		if len(categories) < minCategories {
-			t.Errorf("area %q has %d categories, expected at least %d", area, len(categories), minCategories)
+		// Verify category code references a valid group by extracting group code
+		groupCode := deriveGroupCode(catCode)
+		if _, ok := taxonomy.Groups[groupCode]; !ok {
+			t.Errorf("category %s has group prefix %s which doesn't exist in groups", catCode, groupCode)
 		}
 	}
 
-	// Verify specific well-known categories exist with descriptions
+	// Test groups structure
+	for groupCode, group := range taxonomy.Groups {
+		// Each group should have a non-empty name
+		if group.Name == "" {
+			t.Errorf("group %s has empty name", groupCode)
+		}
+
+		// Group code should match the key
+		if group.Code != groupCode {
+			t.Errorf("group %s has mismatched code %s", groupCode, group.Code)
+		}
+	}
+
+	// Verify expected major groups exist
+	expectedGroups := []string{"cs", "math", "physics", "q-bio", "q-fin", "stat"}
+	for _, groupCode := range expectedGroups {
+		if _, ok := taxonomy.Groups[groupCode]; !ok {
+			t.Errorf("expected group %q not found", groupCode)
+		}
+	}
+
+	// Verify minimum category counts
+	minCategories := 100 // Should have at least 100 total categories
+	if len(taxonomy.Categories) < minCategories {
+		t.Errorf("expected at least %d categories, got %d", minCategories, len(taxonomy.Categories))
+	}
+
+	// Verify specific well-known categories exist with correct structure
 	wellKnownCategories := map[string]string{
 		"cs.AI":          "cs",
 		"cs.LG":          "cs",
@@ -83,23 +90,46 @@ func TestFetchCategoryTaxonomy(t *testing.T) {
 		"stat.ML":        "stat",
 	}
 
-	for catCode, expectedArea := range wellKnownCategories {
-		areaCategories, ok := taxonomy[expectedArea]
+	for catCode, expectedGroup := range wellKnownCategories {
+		category, ok := taxonomy.Categories[catCode]
 		if !ok {
-			t.Errorf("area %q not found for category %q", expectedArea, catCode)
+			t.Errorf("expected category %q not found", catCode)
 			continue
 		}
-		desc, ok := areaCategories[catCode]
-		if !ok {
-			t.Errorf("expected category %q not found in area %q", catCode, expectedArea)
-		} else if desc == "" {
-			t.Errorf("category %q has empty description", catCode)
+		// Verify the category code prefix matches expected group
+		groupCode := deriveGroupCode(catCode)
+		if groupCode != expectedGroup {
+			t.Errorf("category %q has group prefix %q, expected %q", catCode, groupCode, expectedGroup)
+		}
+		if category.Name == "" {
+			t.Errorf("category %q has empty name", catCode)
 		}
 	}
 
 	// Log summary for visibility
-	t.Logf("Successfully fetched taxonomy with %d areas", len(taxonomy))
-	for area, categories := range taxonomy {
-		t.Logf("  %s: %d categories", area, len(categories))
+	groupsWord := "groups"
+	if len(taxonomy.Groups) == 1 {
+		groupsWord = "group"
+	}
+	categoriesWord := "categories"
+	if len(taxonomy.Categories) == 1 {
+		categoriesWord = "category"
+	}
+	t.Logf("Successfully fetched taxonomy with %d %s and %d %s", len(taxonomy.Groups), groupsWord, len(taxonomy.Categories), categoriesWord)
+
+	// Count categories per group
+	groupCounts := make(map[string]int)
+	for catCode := range taxonomy.Categories {
+		groupCode := deriveGroupCode(catCode)
+		groupCounts[groupCode]++
+	}
+	for groupCode, count := range groupCounts {
+		if group, ok := taxonomy.Groups[groupCode]; ok {
+			categoriesWord = "categories"
+			if count == 1 {
+				categoriesWord = "category"
+			}
+			t.Logf("  %s (%s): %d %s", groupCode, group.Name, count, categoriesWord)
+		}
 	}
 }
