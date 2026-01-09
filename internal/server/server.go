@@ -141,14 +141,14 @@ func runServer(transport_flag string, server_host string, server_port int, state
 			"startIndex": {
 				Description: "The starting index for fetching results (0-based)",
 				Type:        "integer",
-				Minimum:     jsonschema.Ptr(0.0),
+				Minimum:     jsonschema.Ptr(float64(0)),
 				Default:     json.RawMessage([]byte(`0`)),
 			},
 			"fetchSize": {
 				Description: "Number of results to fetch (min: 1, max: 100)",
 				Type:        "integer",
-				Minimum:     jsonschema.Ptr(1.0),
-				Maximum:     jsonschema.Ptr(100.0),
+				Minimum:     jsonschema.Ptr(float64(1)),
+				Maximum:     jsonschema.Ptr(float64(100)),
 				Default:     json.RawMessage([]byte(`10`)),
 			},
 		},
