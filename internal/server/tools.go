@@ -58,14 +58,14 @@ type CategoryFetchLatestOutput struct {
 	Results string `json:"results" jsonschema:"The latest publications from arXiv in JSON format"`
 }
 
-// ArxivToolHandler is a generic handler that validates input/output and delegates to a business logic function
+// ArxivToolHandler is a generic handler that validates input/output and delegates to a handler function
 type ArxivToolHandler struct {
 	inputSchema  *jsonschema.Resolved
 	outputSchema *jsonschema.Resolved
 	handlerFunc  func(ctx context.Context, input json.RawMessage) (any, error)
 }
 
-// NewArxivToolHandler creates a new tool handler with the given schemas and business logic function
+// NewArxivToolHandler creates a new tool handler with the given schemas and handler function
 func NewArxivToolHandler(inputSchema, outputSchema *jsonschema.Schema, handlerFunc func(ctx context.Context, input json.RawMessage) (any, error)) (*ArxivToolHandler, error) {
 	resIn, err := inputSchema.Resolve(nil)
 	if err != nil {
@@ -82,14 +82,14 @@ func NewArxivToolHandler(inputSchema, outputSchema *jsonschema.Schema, handlerFu
 	}, nil
 }
 
-// Handle is the generic MCP handler that validates input, calls the business logic, and validates output
+// Handle is the generic MCP handler that validates input, calls the handler function, and validates output
 func (h *ArxivToolHandler) Handle(ctx context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	// Validate input against schema
 	if err := unmarshalAndValidate(req.Params.Arguments, h.inputSchema); err != nil {
 		return mcp_tool_errorf("invalid input: %v", err), nil
 	}
 
-	// Call the business logic handler
+	// Call the handler function
 	result, err := h.handlerFunc(ctx, req.Params.Arguments)
 	if err != nil {
 		return mcp_tool_errorf("handler error: %v", err), nil
@@ -112,7 +112,7 @@ func (h *ArxivToolHandler) Handle(ctx context.Context, req *mcp.CallToolRequest)
 	}, nil
 }
 
-// categoryFetchLatest contains the business logic for fetching latest publications by category.
+// categoryFetchLatest contains the handler function for fetching latest publications by category.
 // This function does NOT retry on errors - it returns errors immediately to comply with arXiv API
 // terms of use. Rate limiting is enforced to ensure max 1 request per 3 seconds.
 // See: https://info.arxiv.org/help/api/tou.html
@@ -320,8 +320,8 @@ func fetchCategoryTaxonomy(ctx context.Context, input json.RawMessage) (any, err
 //        FetchSize  uint   `json:"fetchSize,omitempty"`
 //    }
 //
-// 2. Create the business logic function:
-//    func authorFetchLatestLogic(ctx context.Context, input json.RawMessage) (any, error) {
+// 2. Create the handler function:
+//    func authorFetchLatestHandler(ctx context.Context, input json.RawMessage) (any, error) {
 //        var args ArxivAuthorFetchLatestArgs
 //        if err := json.Unmarshal(input, &args); err != nil {
 //            return nil, fmt.Errorf("failed to unmarshal arguments: %w", err)
