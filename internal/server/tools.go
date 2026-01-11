@@ -219,7 +219,7 @@ func deriveGroupCode(categoryCode string) string {
 func fetchCategoryTaxonomy(ctx context.Context, input json.RawMessage) (any, error) {
 	const taxonomyURL = "https://arxiv.org/category_taxonomy"
 
-	slog.Info("Fetching arXiv category taxonomy", "url", taxonomyURL)
+	slog.Info("Fetching and parsing arXiv category taxonomy from", "url", taxonomyURL)
 	resp, err := httpClient.Get(taxonomyURL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch taxonomy: %w", err)

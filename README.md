@@ -1,6 +1,8 @@
 # Opus MCP
 
-An MCP server for obtaining context information for language models on existing research.
+An MCP server for obtaining context information for language models on research pre-prints.
+
+**The instructions below will get you started but these are not exhaustive or explanatory as to what this project is about. Additional documentation will be provided later.**
 
 ## Quick Start
 
