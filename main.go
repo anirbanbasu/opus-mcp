@@ -3,6 +3,9 @@ package main
 import (
 	"flag"
 	"fmt"
+	"log/slog"
+
+	"github.com/joho/godotenv"
 
 	server "opus-mcp/internal/server"
 )
@@ -22,6 +25,14 @@ func (t *TransportFlag) Set(value string) error {
 }
 
 func main() {
+	// Load .env file if present (optional, for local development)
+	if err := godotenv.Load(); err != nil {
+		// .env file not found or couldn't be loaded - this is OK, continue with system env vars
+		slog.Debug("No .env file loaded", "info", "Using system environment variables only")
+	} else {
+		slog.Info("Loaded configuration from .env file")
+	}
+
 	var transport TransportFlag = "stdio"
 	flag.Var(&transport, "transport", "The transport mechanism to use: 'stdio' or 'http'. The 'http' transport implies streamable HTTP. Note that 'sse' is disbled because it is deprecated.")
 	var server_host string = "localhost"

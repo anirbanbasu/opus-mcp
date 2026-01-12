@@ -5,6 +5,7 @@ go 1.25.5
 require (
 	github.com/PuerkitoBio/goquery v1.11.0
 	github.com/google/jsonschema-go v0.4.2
+	github.com/joho/godotenv v1.5.1
 	github.com/minio/minio-go/v7 v7.0.97
 	github.com/mmcdole/gofeed v1.3.0
 	github.com/modelcontextprotocol/go-sdk v1.2.0
