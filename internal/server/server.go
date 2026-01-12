@@ -196,6 +196,28 @@ func addMCPTools(server *mcp.Server) error {
 		OutputSchema: taxonomyOutputSchema,
 	}, taxonomyHandler.Handle)
 
+	// ArXiv PDF download to S3 tool
+	downloadPDFInputSchema, err := jsonschema.ForType(reflect.TypeFor[ArxivDownloadPDFArgs](), &jsonschema.ForOptions{})
+	if err != nil {
+		return fmt.Errorf("failed to reflect input schema from ArxivDownloadPDFArgs: %w", err)
+	}
+	downloadPDFOutputSchema, err := jsonschema.ForType(reflect.TypeFor[ArxivDownloadPDFOutput](), &jsonschema.ForOptions{})
+	if err != nil {
+		return fmt.Errorf("failed to reflect output schema from ArxivDownloadPDFOutput: %w", err)
+	}
+	downloadPDFHandler, err := NewArxivToolHandler(downloadPDFInputSchema, downloadPDFOutputSchema, downloadPDFToMinIO)
+	if err != nil {
+		return fmt.Errorf("failed to create arXiv PDF download handler: %w", err)
+	}
+	slog.Info("arXiv PDF download handler created successfully")
+
+	server.AddTool(&mcp.Tool{
+		Name:         "arxiv_download_pdf",
+		Description:  "Download an arXiv PDF from a URL and upload it to a S3 bucket, e.g., over MinIO. Requires S3 credentials and bucket configuration. The PDF will be stored in the 'arxiv/' prefix within the bucket.",
+		InputSchema:  downloadPDFInputSchema,
+		OutputSchema: downloadPDFOutputSchema,
+	}, downloadPDFHandler.Handle)
+
 	return nil
 }
 

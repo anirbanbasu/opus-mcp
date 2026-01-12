@@ -11,6 +11,7 @@ import (
 
 	"opus-mcp/internal"
 	"opus-mcp/internal/parser"
+	"opus-mcp/internal/storage"
 
 	"github.com/PuerkitoBio/goquery"
 	"github.com/google/jsonschema-go/jsonschema"
@@ -20,6 +21,7 @@ import (
 )
 
 const arxivApiEndpoint string = "https://export.arxiv.org/api/query"
+const arxivPDFBaseURL string = "https://arxiv.org/pdf/"
 
 // arxivRateLimiter enforces arXiv API rate limit: max 1 request per 3 seconds
 // See: https://info.arxiv.org/help/api/tou.html
@@ -311,27 +313,79 @@ func fetchCategoryTaxonomy(ctx context.Context, input json.RawMessage) (any, err
 	return taxonomy, nil
 }
 
-// Example: To add a new tool like AuthorFetchLatest, follow this pattern:
-//
-// 1. Define the input/output structs:
-//    type ArxivAuthorFetchLatestArgs struct {
-//        Author     string `json:"author"`
-//        StartIndex uint   `json:"startIndex,omitempty"`
-//        FetchSize  uint   `json:"fetchSize,omitempty"`
-//    }
-//
-// 2. Create the handler function:
-//    func authorFetchLatestHandler(ctx context.Context, input json.RawMessage) (any, error) {
-//        var args ArxivAuthorFetchLatestArgs
-//        if err := json.Unmarshal(input, &args); err != nil {
-//            return nil, fmt.Errorf("failed to unmarshal arguments: %w", err)
-//        }
-//        // ... implement your logic here
-//        return result, nil
-//    }
-//
-// 3. In server.go, create the handler and register it:
-//    authorInputSchema := &jsonschema.Schema{ /* ... */ }
-//    authorOutputSchema := &jsonschema.Schema{ /* ... */ }
-//    authorHandler, err := NewArxivToolHandler(authorInputSchema, authorOutputSchema, authorFetchLatestLogic)
-//    server.AddTool(&mcp.Tool{Name: "arxiv_author_fetch_latest", ...}, authorHandler.Handle)
+// ArxivDownloadPDFArgs defines the input parameters for downloading an arXiv PDF to S3 storage
+type ArxivDownloadPDFArgs struct {
+	PDFURL                         string `json:"pdfUrl" jsonschema:"The arXiv PDF URL to download (e.g., https://arxiv.org/pdf/2601.05525)"`
+	S3Endpoint                     string `json:"s3Endpoint" jsonschema:"S3 server endpoint (e.g., play.min.io:9000 or localhost:9000) (⚠️ Future deprecation warning: passing S3 access credentials as input arguments will be deprecated in the future for better security practices)"`
+	S3AccessKey                    string `json:"s3AccessKey" jsonschema:"S3 access key for authentication"`
+	S3SecretKey                    string `json:"s3SecretKey" jsonschema:"S3 secret key for authentication"`
+	BucketName                     string `json:"bucketName" jsonschema:"Target S3 bucket name where the PDF will be stored"`
+	UseSSL                         bool   `json:"useSSL" jsonschema:"Whether to use SSL/TLS for the S3 connection (true for HTTPS, false for HTTP)"`
+	SkipSSLCertificateVerification bool   `json:"skipSSLCertificateVerification,omitempty" jsonschema:"Whether to skip certificate verification for the S3 connection. Set to true for self-signed certificates. ⚠️ INSECURE!"`
+}
+
+// ArxivDownloadPDFOutput defines the output structure for the PDF download operation
+type ArxivDownloadPDFOutput struct {
+	Success    bool   `json:"success" jsonschema:"Whether the download and upload operation was successful"`
+	Message    string `json:"message" jsonschema:"Status message describing the result of the operation"`
+	ObjectName string `json:"objectName,omitempty" jsonschema:"The name/path of the object in the S3 bucket"`
+	BucketName string `json:"bucketName,omitempty" jsonschema:"The S3 bucket where the file was stored"`
+}
+
+// downloadPDFToMinIO handles downloading an arXiv PDF and uploading it to S3 storage
+func downloadPDFToMinIO(ctx context.Context, input json.RawMessage) (any, error) {
+	var args ArxivDownloadPDFArgs
+	if err := json.Unmarshal(input, &args); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal arguments: %w", err)
+	}
+
+	// Validate the PDF URL
+	if !strings.HasPrefix(args.PDFURL, arxivPDFBaseURL) {
+		return nil, fmt.Errorf("invalid PDF URL: must start with %s", arxivPDFBaseURL)
+	}
+
+	// Extract filename from URL for object naming
+	// Example: https://arxiv.org/pdf/2301.00001.pdf -> 2301.00001.pdf
+	parts := strings.Split(args.PDFURL, "/")
+	filename := parts[len(parts)-1]
+	if !strings.HasSuffix(filename, ".pdf") {
+		filename = filename + ".pdf"
+	}
+
+	// Create object name with arxiv prefix for organisation
+	objectName := "arxiv/" + filename
+
+	// Configure S3 client
+	config := storage.MinIOConfig{
+		Endpoint:           args.S3Endpoint,
+		AccessKey:          args.S3AccessKey,
+		SecretKey:          args.S3SecretKey,
+		UseSSL:             args.UseSSL,
+		InsecureSkipVerify: args.SkipSSLCertificateVerification,
+	}
+
+	slog.Info("Starting arXiv PDF download to S3 storage",
+		"pdf_url", args.PDFURL,
+		"bucket", args.BucketName,
+		"object", objectName,
+		"endpoint", args.S3Endpoint,
+		"insecure_tls", args.SkipSSLCertificateVerification)
+
+	// Download and upload to S3
+	err := storage.DownloadURLToMinIO(ctx, args.PDFURL, config, args.BucketName, objectName)
+	if err != nil {
+		return ArxivDownloadPDFOutput{
+			Success:    false,
+			Message:    fmt.Sprintf("Failed to download and upload PDF: %v", err),
+			ObjectName: objectName,
+			BucketName: args.BucketName,
+		}, nil
+	}
+
+	return ArxivDownloadPDFOutput{
+		Success:    true,
+		Message:    fmt.Sprintf("Successfully downloaded arXiv PDF and uploaded to S3 bucket '%s' as '%s'", args.BucketName, objectName),
+		ObjectName: objectName,
+		BucketName: args.BucketName,
+	}, nil
+}
