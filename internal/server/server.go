@@ -162,7 +162,7 @@ func addMCPTools(server *mcp.Server) error {
 	if err != nil {
 		return fmt.Errorf("failed to create category fetch latest handler: %w", err)
 	}
-	slog.Info("category fetch handler created successfully", "schema_id", categoryFetchLatestHandler.inputSchema.Schema().ID)
+	slog.Info("category fetch handler created successfully")
 
 	server.AddTool(&mcp.Tool{
 		Name:         "arxiv_category_fetch_latest",
@@ -248,10 +248,10 @@ func runServer(transport_flag string, server_host string, server_port int, enabl
 	slog.Info("MCP tools added successfully")
 
 	if transport_flag == "http" {
-		// Start HTTP server
+		// Start HTTP server -- should the server have a stateless or stateful option for logging per MCP client ID, at least?
 		mcpHandler := mcp.NewStreamableHTTPHandler(func(r *http.Request) *mcp.Server {
 			return server
-		}, &mcp.StreamableHTTPOptions{JSONResponse: true})
+		}, &mcp.StreamableHTTPOptions{JSONResponse: true, Stateless: true})
 		mux := http.NewServeMux()
 		mux.Handle("/mcp", mcpHandler)
 		mux.HandleFunc("/health", healthCheckHandler)
