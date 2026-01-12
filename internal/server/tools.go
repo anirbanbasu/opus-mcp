@@ -32,6 +32,18 @@ var arxivRateLimiter = rate.NewLimiter(rate.Every(3*time.Second), 1)
 // httpClient is a configured HTTP client with proxy and TLS support
 var httpClient = internal.CreateConfiguredHTTPClient()
 
+// S3Config holds S3 configuration loaded from environment variables
+type S3Config struct {
+	Endpoint           string
+	AccessKey          string
+	SecretKey          string
+	UseSSL             bool
+	InsecureSkipVerify bool
+}
+
+// globalS3Config is the S3 configuration loaded at server startup
+var globalS3Config *S3Config
+
 func mcp_tool_errorf(format string, args ...any) *mcp.CallToolResult {
 	slog.Warn(fmt.Sprintf(format, args...))
 	return &mcp.CallToolResult{
@@ -317,12 +329,7 @@ func fetchCategoryTaxonomy(ctx context.Context, input json.RawMessage) (any, err
 
 // ArxivDownloadPDFArgs defines the input parameters for downloading an arXiv PDF to S3 storage
 type ArxivDownloadPDFArgs struct {
-	ArticleURL                     string `json:"articleUrl" jsonschema:"The arXiv article URL to download (e.g., https://arxiv.org/abs/2601.05525 or https://arxiv.org/pdf/2601.05525)"`
-	S3Endpoint                     string `json:"s3Endpoint" jsonschema:"S3 server endpoint (e.g., play.min.io:9000 or localhost:9000) (⚠️ Future deprecation warning: passing S3 access credentials as input arguments will be deprecated in the future for better security practices)"`
-	S3AccessKey                    string `json:"s3AccessKey" jsonschema:"S3 access key for authentication"`
-	S3SecretKey                    string `json:"s3SecretKey" jsonschema:"S3 secret key for authentication"`
-	UseSSL                         bool   `json:"useSSL" jsonschema:"Whether to use SSL/TLS for the S3 connection (true for HTTPS, false for HTTP)"`
-	SkipSSLCertificateVerification bool   `json:"skipSSLCertificateVerification,omitempty" jsonschema:"Whether to skip certificate verification for the S3 connection. Set to true for self-signed certificates. ⚠️ INSECURE!"`
+	ArticleURL string `json:"articleUrl" jsonschema:"The arXiv article URL to download (e.g., https://arxiv.org/abs/2601.05525 or https://arxiv.org/pdf/2601.05525)"`
 }
 
 // ArxivDownloadPDFOutput defines the output structure for the PDF download operation
@@ -366,21 +373,26 @@ func downloadPDFToMinIO(ctx context.Context, input json.RawMessage) (any, error)
 	// Create object name with arxiv prefix for organisation
 	objectName := "arxiv/" + filename
 
-	// Configure S3 client
+	// Check if S3 configuration is loaded
+	if globalS3Config == nil {
+		return nil, fmt.Errorf("S3 configuration not loaded. Please ensure OPUS_MCP_S3_ENDPOINT, OPUS_MCP_S3_ACCESS_KEY, and OPUS_MCP_S3_SECRET_KEY environment variables are set")
+	}
+
+	// Configure S3 client from global config
 	config := storage.MinIOConfig{
-		Endpoint:           args.S3Endpoint,
-		AccessKey:          args.S3AccessKey,
-		SecretKey:          args.S3SecretKey,
-		UseSSL:             args.UseSSL,
-		InsecureSkipVerify: args.SkipSSLCertificateVerification,
+		Endpoint:           globalS3Config.Endpoint,
+		AccessKey:          globalS3Config.AccessKey,
+		SecretKey:          globalS3Config.SecretKey,
+		UseSSL:             globalS3Config.UseSSL,
+		InsecureSkipVerify: globalS3Config.InsecureSkipVerify,
 	}
 
 	slog.Info("Starting arXiv PDF download to S3 storage",
 		"pdf_url", args.ArticleURL,
 		"bucket", S3_ARTICLES_BUCKET,
 		"object", objectName,
-		"endpoint", args.S3Endpoint,
-		"insecure_tls", args.SkipSSLCertificateVerification)
+		"endpoint", globalS3Config.Endpoint,
+		"insecure_tls", globalS3Config.InsecureSkipVerify)
 
 	// Download and upload to S3
 	uploadInfo, err := storage.DownloadURLToMinIO(ctx, args.ArticleURL, config, S3_ARTICLES_BUCKET, objectName)

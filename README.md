@@ -29,20 +29,37 @@ The server supports the following environment variables for network and security
 - `CURL_CA_BUNDLE` - Alternative path to CA bundle (cURL compatibility)
 - `OPUS_MCP_INSECURE_SKIP_VERIFY` - Set to `true` to skip TLS certificate verification (⚠️ **INSECURE** - only for development/testing)
 
+#### S3 Storage Configuration
+
+Required for arXiv PDF download functionality:
+
+- `OPUS_MCP_S3_ENDPOINT` - S3 server endpoint (e.g., `play.min.io:9000` or `localhost:9000`) **[REQUIRED]**
+- `OPUS_MCP_S3_ACCESS_KEY` - S3 access key for authentication **[REQUIRED]**
+- `OPUS_MCP_S3_SECRET_KEY` - S3 secret key for authentication **[REQUIRED]**
+- `OPUS_MCP_S3_USE_SSL` - Whether to use SSL/TLS for S3 connection (default: `true`)
+- `OPUS_MCP_S3_INSECURE_SKIP_VERIFY` - Skip certificate verification for S3 (default: `false`) (⚠️ **INSECURE** - only for self-signed certificates in development)
+
 #### Example Usage
 
 ```bash
+# Configure S3 storage (required for PDF downloads)
+export OPUS_MCP_S3_ENDPOINT=play.min.io:9000
+export OPUS_MCP_S3_ACCESS_KEY=your_access_key
+export OPUS_MCP_S3_SECRET_KEY=your_secret_key
+export OPUS_MCP_S3_USE_SSL=true
+
 # Using a corporate proxy with custom CA certificate
 export HTTPS_PROXY=http://proxy.company.com:8080
 export SSL_CERT_FILE=/path/to/company-ca-bundle.crt
 just run-http
 
-# Skip certificate verification for testing (NOT RECOMMENDED FOR PRODUCTION)
+# Skip certificate verification for testing with self-signed certificates (NOT RECOMMENDED FOR PRODUCTION)
 export OPUS_MCP_INSECURE_SKIP_VERIFY=true
+export OPUS_MCP_S3_INSECURE_SKIP_VERIFY=true
 just run-http
 ```
 
-⚠️ **Security Warning**: Never use `OPUS_MCP_INSECURE_SKIP_VERIFY=true` in production environments. This disables certificate verification and makes your connections vulnerable to man-in-the-middle attacks.
+⚠️ **Security Warning**: Never use `OPUS_MCP_INSECURE_SKIP_VERIFY=true` or `OPUS_MCP_S3_INSECURE_SKIP_VERIFY=true` in production environments. This disables certificate verification and makes your connections vulnerable to man-in-the-middle attacks.
 
 ### Running the Server
 

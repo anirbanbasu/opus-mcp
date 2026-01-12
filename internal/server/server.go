@@ -11,6 +11,7 @@ import (
 	"os/signal"
 	"reflect"
 	"runtime"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -26,6 +27,61 @@ var serverProcessStartTime time.Time
 
 func uptime() time.Duration {
 	return time.Since(serverProcessStartTime)
+}
+
+// LoadS3Config loads S3 configuration from environment variables
+func LoadS3Config() (*S3Config, error) {
+	endpoint := os.Getenv("OPUS_MCP_S3_ENDPOINT")
+	accessKey := os.Getenv("OPUS_MCP_S3_ACCESS_KEY")
+	secretKey := os.Getenv("OPUS_MCP_S3_SECRET_KEY")
+
+	if endpoint == "" {
+		return nil, fmt.Errorf("OPUS_MCP_S3_ENDPOINT environment variable is required")
+	}
+	if accessKey == "" {
+		return nil, fmt.Errorf("OPUS_MCP_S3_ACCESS_KEY environment variable is required")
+	}
+	if secretKey == "" {
+		return nil, fmt.Errorf("OPUS_MCP_S3_SECRET_KEY environment variable is required")
+	}
+
+	// Optional: OPUS_MCP_S3_USE_SSL (defaults to true)
+	useSSL := true
+	if useSSLStr := os.Getenv("OPUS_MCP_S3_USE_SSL"); useSSLStr != "" {
+		if parsed, err := strconv.ParseBool(useSSLStr); err == nil {
+			useSSL = parsed
+		} else {
+			slog.Warn("Invalid OPUS_MCP_S3_USE_SSL value, using default", "value", useSSLStr, "default", true)
+		}
+	}
+
+	// Optional: OPUS_MCP_S3_INSECURE_SKIP_VERIFY (defaults to false)
+	insecureSkipVerify := false
+	if skipVerifyStr := os.Getenv("OPUS_MCP_S3_INSECURE_SKIP_VERIFY"); skipVerifyStr != "" {
+		if parsed, err := strconv.ParseBool(skipVerifyStr); err == nil {
+			insecureSkipVerify = parsed
+			if insecureSkipVerify {
+				slog.Warn("⚠️  S3 TLS certificate verification is DISABLED - this is insecure!")
+			}
+		} else {
+			slog.Warn("Invalid OPUS_MCP_S3_INSECURE_SKIP_VERIFY value, using default", "value", skipVerifyStr, "default", false)
+		}
+	}
+
+	config := &S3Config{
+		Endpoint:           endpoint,
+		AccessKey:          accessKey,
+		SecretKey:          secretKey,
+		UseSSL:             useSSL,
+		InsecureSkipVerify: insecureSkipVerify,
+	}
+
+	slog.Info("S3 configuration loaded from environment variables",
+		"endpoint", endpoint,
+		"use_ssl", useSSL,
+		"insecure_skip_verify", insecureSkipVerify)
+
+	return config, nil
 }
 
 // createCORSMiddleware adds CORS headers to responses and handles OPTIONS requests
@@ -195,31 +251,44 @@ func addMCPTools(server *mcp.Server) error {
 	}, taxonomyHandler.Handle)
 
 	// ArXiv PDF download to S3 tool
-	downloadPDFInputSchema, err := jsonschema.ForType(reflect.TypeFor[ArxivDownloadPDFArgs](), &jsonschema.ForOptions{})
-	if err != nil {
-		return fmt.Errorf("failed to reflect input schema from ArxivDownloadPDFArgs: %w", err)
-	}
-	downloadPDFOutputSchema, err := jsonschema.ForType(reflect.TypeFor[ArxivDownloadPDFOutput](), &jsonschema.ForOptions{})
-	if err != nil {
-		return fmt.Errorf("failed to reflect output schema from ArxivDownloadPDFOutput: %w", err)
-	}
-	downloadPDFHandler, err := NewArxivToolHandler(downloadPDFInputSchema, downloadPDFOutputSchema, downloadPDFToMinIO)
-	if err != nil {
-		return fmt.Errorf("failed to create arXiv PDF download handler: %w", err)
-	}
-	slog.Info("arXiv PDF download handler created successfully")
+	if globalS3Config != nil {
+		downloadPDFInputSchema, err := jsonschema.ForType(reflect.TypeFor[ArxivDownloadPDFArgs](), &jsonschema.ForOptions{})
+		if err != nil {
+			return fmt.Errorf("failed to reflect input schema from ArxivDownloadPDFArgs: %w", err)
+		}
+		downloadPDFOutputSchema, err := jsonschema.ForType(reflect.TypeFor[ArxivDownloadPDFOutput](), &jsonschema.ForOptions{})
+		if err != nil {
+			return fmt.Errorf("failed to reflect output schema from ArxivDownloadPDFOutput: %w", err)
+		}
+		downloadPDFHandler, err := NewArxivToolHandler(downloadPDFInputSchema, downloadPDFOutputSchema, downloadPDFToMinIO)
+		if err != nil {
+			return fmt.Errorf("failed to create arXiv PDF download handler: %w", err)
+		}
+		slog.Info("arXiv PDF download handler created successfully")
 
-	server.AddTool(&mcp.Tool{
-		Name:         "arxiv_download_pdf",
-		Description:  "Download an arXiv PDF from a URL and upload it to a S3 bucket, e.g., over MinIO. Requires S3 credentials. The PDF will be stored in the 'arxiv/' prefix within the '" + metadata.S3_ARTICLES_BUCKET + "' bucket.",
-		InputSchema:  downloadPDFInputSchema,
-		OutputSchema: downloadPDFOutputSchema,
-	}, downloadPDFHandler.Handle)
+		server.AddTool(&mcp.Tool{
+			Name:         "arxiv_download_pdf",
+			Description:  "Download an arXiv PDF from a URL and upload it to a S3 bucket, e.g., over MinIO. Requires S3 credentials. The PDF will be stored in the 'arxiv/' prefix within the '" + metadata.S3_ARTICLES_BUCKET + "' bucket.",
+			InputSchema:  downloadPDFInputSchema,
+			OutputSchema: downloadPDFOutputSchema,
+		}, downloadPDFHandler.Handle)
+	} else {
+		slog.Info("Skipping arXiv PDF download tool addition - S3 configuration not available")
+	}
 
 	return nil
 }
 
 func runServer(transport_flag string, server_host string, server_port int, enableRequestResponseLogging bool) {
+	// Load S3 configuration from environment variables at startup
+	var err error
+	globalS3Config, err = LoadS3Config()
+	if err != nil {
+		slog.Warn("S3 configuration not available - S3-dependent tools will be disabled", "error", err)
+		slog.Warn("To enable S3 features, set: OPUS_MCP_S3_ENDPOINT, OPUS_MCP_S3_ACCESS_KEY, OPUS_MCP_S3_SECRET_KEY")
+		globalS3Config = nil
+	}
+
 	ctx := context.Background()
 	server := mcp.NewServer(
 		&mcp.Implementation{
