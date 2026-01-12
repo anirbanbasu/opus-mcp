@@ -211,7 +211,7 @@ func addMCPTools(server *mcp.Server) error {
 
 	server.AddTool(&mcp.Tool{
 		Name:         "arxiv_download_pdf",
-		Description:  "Download an arXiv PDF from a URL and upload it to a S3 bucket, e.g., over MinIO. Requires S3 credentials and bucket configuration. The PDF will be stored in the 'arxiv/' prefix within the bucket.",
+		Description:  "Download an arXiv PDF from a URL and upload it to a S3 bucket, e.g., over MinIO. Requires S3 credentials. The PDF will be stored in the 'arxiv/' prefix within the '" + metadata.S3_ARTICLES_BUCKET + "' bucket.",
 		InputSchema:  downloadPDFInputSchema,
 		OutputSchema: downloadPDFOutputSchema,
 	}, downloadPDFHandler.Handle)

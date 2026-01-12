@@ -57,41 +57,41 @@ func createMinIOClient(config MinIOConfig) (*minio.Client, error) {
 //   - bucketName: Target S3 bucket name
 //   - objectName: Target object name in the bucket (file name/path)
 //
-// Returns an error if any step fails (download, upload, or S3 operations).
-func DownloadURLToMinIO(ctx context.Context, sourceURL string, config MinIOConfig, bucketName, objectName string) error {
+// Returns the upload information and an error if any step fails (download, upload, or S3 operations).
+func DownloadURLToMinIO(ctx context.Context, sourceURL string, config MinIOConfig, bucketName, objectName string) (minio.UploadInfo, error) {
 	// Validate inputs
 	if sourceURL == "" {
-		return fmt.Errorf("source URL cannot be empty")
+		return minio.UploadInfo{}, fmt.Errorf("source URL cannot be empty")
 	}
 	if bucketName == "" {
-		return fmt.Errorf("bucket name cannot be empty")
+		return minio.UploadInfo{}, fmt.Errorf("bucket name cannot be empty")
 	}
 	if objectName == "" {
-		return fmt.Errorf("object name cannot be empty")
+		return minio.UploadInfo{}, fmt.Errorf("object name cannot be empty")
 	}
 
 	// Parse and validate the source URL
 	parsedURL, err := url.Parse(sourceURL)
 	if err != nil {
-		return fmt.Errorf("invalid source URL: %w", err)
+		return minio.UploadInfo{}, fmt.Errorf("invalid source URL: %w", err)
 	}
 	if parsedURL.Scheme != "http" && parsedURL.Scheme != "https" {
-		return fmt.Errorf("unsupported URL scheme: %s (only http and https are supported)", parsedURL.Scheme)
+		return minio.UploadInfo{}, fmt.Errorf("unsupported URL scheme: %s (only http and https are supported)", parsedURL.Scheme)
 	}
 
 	// Initialize MinIO client
 	minioClient, err := createMinIOClient(config)
 	if err != nil {
-		return fmt.Errorf("failed to create MinIO client: %w", err)
+		return minio.UploadInfo{}, fmt.Errorf("failed to create MinIO client: %w", err)
 	}
 
 	// Check if bucket exists and is accessible
 	exists, err := minioClient.BucketExists(ctx, bucketName)
 	if err != nil {
-		return fmt.Errorf("failed to check if bucket exists: %w", err)
+		return minio.UploadInfo{}, fmt.Errorf("failed to check if bucket exists: %w", err)
 	}
 	if !exists {
-		return fmt.Errorf("bucket '%s' does not exist", bucketName)
+		return minio.UploadInfo{}, fmt.Errorf("bucket '%s' does not exist", bucketName)
 	}
 
 	slog.Info("Starting download from URL to S3 storage",
@@ -105,18 +105,18 @@ func DownloadURLToMinIO(ctx context.Context, sourceURL string, config MinIOConfi
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, sourceURL, nil)
 	if err != nil {
-		return fmt.Errorf("failed to create HTTP request: %w", err)
+		return minio.UploadInfo{}, fmt.Errorf("failed to create HTTP request: %w", err)
 	}
 
 	startTime := time.Now()
 	resp, err := httpClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("failed to download file from URL: %w", err)
+		return minio.UploadInfo{}, fmt.Errorf("failed to download file from URL: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("HTTP request failed with status %d: %s", resp.StatusCode, resp.Status)
+		return minio.UploadInfo{}, fmt.Errorf("HTTP request failed with status %d: %s", resp.StatusCode, resp.Status)
 	}
 
 	// Determine content type and size
@@ -142,7 +142,7 @@ func DownloadURLToMinIO(ctx context.Context, sourceURL string, config MinIOConfi
 		},
 	})
 	if err != nil {
-		return fmt.Errorf("failed to upload file to S3: %w", err)
+		return minio.UploadInfo{}, fmt.Errorf("failed to upload file to S3: %w", err)
 	}
 
 	duration := time.Since(startTime)
@@ -154,7 +154,7 @@ func DownloadURLToMinIO(ctx context.Context, sourceURL string, config MinIOConfi
 		"duration", duration,
 		"version_id", uploadInfo.VersionID)
 
-	return nil
+	return uploadInfo, nil
 }
 
 // DownloadURLToMinIOStream is a streaming variant that doesn't require knowing the content length upfront.
@@ -167,41 +167,41 @@ func DownloadURLToMinIO(ctx context.Context, sourceURL string, config MinIOConfi
 //   - bucketName: Target S3 bucket name
 //   - objectName: Target object name in the bucket (file name/path)
 //
-// Returns an error if any step fails (download, upload, or S3 operations).
-func DownloadURLToMinIOStream(ctx context.Context, sourceURL string, config MinIOConfig, bucketName, objectName string) error {
+// Returns the upload information and an error if any step fails (download, upload, or S3 operations).
+func DownloadURLToMinIOStream(ctx context.Context, sourceURL string, config MinIOConfig, bucketName, objectName string) (minio.UploadInfo, error) {
 	// Validate inputs
 	if sourceURL == "" {
-		return fmt.Errorf("source URL cannot be empty")
+		return minio.UploadInfo{}, fmt.Errorf("source URL cannot be empty")
 	}
 	if bucketName == "" {
-		return fmt.Errorf("bucket name cannot be empty")
+		return minio.UploadInfo{}, fmt.Errorf("bucket name cannot be empty")
 	}
 	if objectName == "" {
-		return fmt.Errorf("object name cannot be empty")
+		return minio.UploadInfo{}, fmt.Errorf("object name cannot be empty")
 	}
 
 	// Parse and validate the source URL
 	parsedURL, err := url.Parse(sourceURL)
 	if err != nil {
-		return fmt.Errorf("invalid source URL: %w", err)
+		return minio.UploadInfo{}, fmt.Errorf("invalid source URL: %w", err)
 	}
 	if parsedURL.Scheme != "http" && parsedURL.Scheme != "https" {
-		return fmt.Errorf("unsupported URL scheme: %s (only http and https are supported)", parsedURL.Scheme)
+		return minio.UploadInfo{}, fmt.Errorf("unsupported URL scheme: %s (only http and https are supported)", parsedURL.Scheme)
 	}
 
 	// Initialize S3 client
 	minioClient, err := createMinIOClient(config)
 	if err != nil {
-		return fmt.Errorf("failed to create S3 client: %w", err)
+		return minio.UploadInfo{}, fmt.Errorf("failed to create S3 client: %w", err)
 	}
 
 	// Check if bucket exists and is accessible
 	exists, err := minioClient.BucketExists(ctx, bucketName)
 	if err != nil {
-		return fmt.Errorf("failed to check if bucket exists: %w", err)
+		return minio.UploadInfo{}, fmt.Errorf("failed to check if bucket exists: %w", err)
 	}
 	if !exists {
-		return fmt.Errorf("bucket '%s' does not exist", bucketName)
+		return minio.UploadInfo{}, fmt.Errorf("bucket '%s' does not exist", bucketName)
 	}
 
 	slog.Info("Starting streaming download from URL to S3 storage",
@@ -215,18 +215,18 @@ func DownloadURLToMinIOStream(ctx context.Context, sourceURL string, config MinI
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, sourceURL, nil)
 	if err != nil {
-		return fmt.Errorf("failed to create HTTP request: %w", err)
+		return minio.UploadInfo{}, fmt.Errorf("failed to create HTTP request: %w", err)
 	}
 
 	startTime := time.Now()
 	resp, err := httpClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("failed to download file from URL: %w", err)
+		return minio.UploadInfo{}, fmt.Errorf("failed to download file from URL: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("HTTP request failed with status %d: %s", resp.StatusCode, resp.Status)
+		return minio.UploadInfo{}, fmt.Errorf("HTTP request failed with status %d: %s", resp.StatusCode, resp.Status)
 	}
 
 	// Determine content type
@@ -249,7 +249,7 @@ func DownloadURLToMinIOStream(ctx context.Context, sourceURL string, config MinI
 		},
 	})
 	if err != nil {
-		return fmt.Errorf("failed to upload file to S3: %w", err)
+		return minio.UploadInfo{}, fmt.Errorf("failed to upload file to S3: %w", err)
 	}
 
 	duration := time.Since(startTime)
@@ -261,7 +261,7 @@ func DownloadURLToMinIOStream(ctx context.Context, sourceURL string, config MinI
 		"duration", duration,
 		"version_id", uploadInfo.VersionID)
 
-	return nil
+	return uploadInfo, nil
 }
 
 // DownloadURLToMinIOWithProgress downloads a file from an HTTP(s) URL and uploads it to S3 storage
@@ -275,41 +275,41 @@ func DownloadURLToMinIOStream(ctx context.Context, sourceURL string, config MinI
 //   - objectName: Target object name in the bucket (file name/path)
 //   - progressFunc: Optional callback function that receives progress updates (bytesTransferred, totalBytes)
 //
-// Returns an error if any step fails (download, upload, or S3 operations).
-func DownloadURLToMinIOWithProgress(ctx context.Context, sourceURL string, config MinIOConfig, bucketName, objectName string, progressFunc func(bytesTransferred, totalBytes int64)) error {
+// Returns the upload information and an error if any step fails (download, upload, or S3 operations).
+func DownloadURLToMinIOWithProgress(ctx context.Context, sourceURL string, config MinIOConfig, bucketName, objectName string, progressFunc func(bytesTransferred, totalBytes int64)) (minio.UploadInfo, error) {
 	// Validate inputs
 	if sourceURL == "" {
-		return fmt.Errorf("source URL cannot be empty")
+		return minio.UploadInfo{}, fmt.Errorf("source URL cannot be empty")
 	}
 	if bucketName == "" {
-		return fmt.Errorf("bucket name cannot be empty")
+		return minio.UploadInfo{}, fmt.Errorf("bucket name cannot be empty")
 	}
 	if objectName == "" {
-		return fmt.Errorf("object name cannot be empty")
+		return minio.UploadInfo{}, fmt.Errorf("object name cannot be empty")
 	}
 
 	// Parse and validate the source URL
 	parsedURL, err := url.Parse(sourceURL)
 	if err != nil {
-		return fmt.Errorf("invalid source URL: %w", err)
+		return minio.UploadInfo{}, fmt.Errorf("invalid source URL: %w", err)
 	}
 	if parsedURL.Scheme != "http" && parsedURL.Scheme != "https" {
-		return fmt.Errorf("unsupported URL scheme: %s (only http and https are supported)", parsedURL.Scheme)
+		return minio.UploadInfo{}, fmt.Errorf("unsupported URL scheme: %s (only http and https are supported)", parsedURL.Scheme)
 	}
 
 	// Initialize S3 client
 	minioClient, err := createMinIOClient(config)
 	if err != nil {
-		return fmt.Errorf("failed to create S3 client: %w", err)
+		return minio.UploadInfo{}, fmt.Errorf("failed to create S3 client: %w", err)
 	}
 
 	// Check if bucket exists and is accessible
 	exists, err := minioClient.BucketExists(ctx, bucketName)
 	if err != nil {
-		return fmt.Errorf("failed to check if bucket exists: %w", err)
+		return minio.UploadInfo{}, fmt.Errorf("failed to check if bucket exists: %w", err)
 	}
 	if !exists {
-		return fmt.Errorf("bucket '%s' does not exist", bucketName)
+		return minio.UploadInfo{}, fmt.Errorf("bucket '%s' does not exist", bucketName)
 	}
 
 	slog.Info("Starting download from URL to S3 storage with progress tracking",
@@ -323,18 +323,18 @@ func DownloadURLToMinIOWithProgress(ctx context.Context, sourceURL string, confi
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, sourceURL, nil)
 	if err != nil {
-		return fmt.Errorf("failed to create HTTP request: %w", err)
+		return minio.UploadInfo{}, fmt.Errorf("failed to create HTTP request: %w", err)
 	}
 
 	startTime := time.Now()
 	resp, err := httpClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("failed to download file from URL: %w", err)
+		return minio.UploadInfo{}, fmt.Errorf("failed to download file from URL: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("HTTP request failed with status %d: %s", resp.StatusCode, resp.Status)
+		return minio.UploadInfo{}, fmt.Errorf("HTTP request failed with status %d: %s", resp.StatusCode, resp.Status)
 	}
 
 	// Determine content type and size
@@ -369,7 +369,7 @@ func DownloadURLToMinIOWithProgress(ctx context.Context, sourceURL string, confi
 		},
 	})
 	if err != nil {
-		return fmt.Errorf("failed to upload file to S3: %w", err)
+		return minio.UploadInfo{}, fmt.Errorf("failed to upload file to S3: %w", err)
 	}
 
 	duration := time.Since(startTime)
@@ -381,7 +381,7 @@ func DownloadURLToMinIOWithProgress(ctx context.Context, sourceURL string, confi
 		"duration", duration,
 		"version_id", uploadInfo.VersionID)
 
-	return nil
+	return uploadInfo, nil
 }
 
 // progressReader wraps an io.Reader to provide progress callbacks

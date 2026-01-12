@@ -1,8 +1,9 @@
 package metadata
 
 const (
-	APP_NAME  string = "opus-mcp"
-	APP_TITLE string = "OPUS MCP Server"
+	APP_NAME           string = "opus-mcp"
+	APP_TITLE          string = "OPUS MCP Server"
+	S3_ARTICLES_BUCKET string = APP_NAME + "-articles"
 )
 
 var (
