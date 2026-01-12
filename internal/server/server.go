@@ -150,9 +150,7 @@ func addMCPTools(server *mcp.Server) error {
 			reflect.TypeFor[ext.Extension](): {
 				Type:        "object",
 				Description: "Generic extension (circular reference simplified)",
-				AdditionalProperties: &jsonschema.Schema{
-					Type: "string",
-				},
+				// Allow any type for extensions (nested objects, arrays, strings, etc.)
 			},
 		},
 	})
