@@ -219,7 +219,7 @@ func addMCPTools(server *mcp.Server) error {
 	return nil
 }
 
-func runServer(transport_flag string, server_host string, server_port int, stateless bool, enableRequestResponseLogging bool) {
+func runServer(transport_flag string, server_host string, server_port int, enableRequestResponseLogging bool) {
 	ctx := context.Background()
 	server := mcp.NewServer(
 		&mcp.Implementation{
@@ -251,7 +251,7 @@ func runServer(transport_flag string, server_host string, server_port int, state
 		// Start HTTP server
 		mcpHandler := mcp.NewStreamableHTTPHandler(func(r *http.Request) *mcp.Server {
 			return server
-		}, &mcp.StreamableHTTPOptions{Stateless: stateless, JSONResponse: true})
+		}, &mcp.StreamableHTTPOptions{JSONResponse: true})
 		mux := http.NewServeMux()
 		mux.Handle("/mcp", mcpHandler)
 		mux.HandleFunc("/health", healthCheckHandler)
@@ -270,7 +270,7 @@ func runServer(transport_flag string, server_host string, server_port int, state
 ░█░█░█▀▀░█░█░▀▀█░░░█░█░█░░░█▀▀
 ░▀▀▀░▀░░░▀▀▀░▀▀▀░░░▀░▀░▀▀▀░▀░░
 		`)
-		slog.Info("Build Version: " + metadata.BuildVersion + " | Build Time: " + metadata.BuildTime + " | OS: " + runtime.GOOS + " | CPU Architecture: " + runtime.GOARCH + " | Stateless Mode: " + fmt.Sprint(stateless))
+		slog.Info("Build Version: " + metadata.BuildVersion + " | Build Time: " + metadata.BuildTime + " | OS: " + runtime.GOOS + " | CPU Architecture: " + runtime.GOARCH)
 		slog.Info("Starting HTTP server on http://" + server_host + ":" + fmt.Sprint(server_port) + ", press Ctrl+C to stop")
 
 		httpServer := &http.Server{
@@ -321,12 +321,12 @@ func runServer(transport_flag string, server_host string, server_port int, state
 	}
 }
 
-func Serve(transport_flag string, server_host string, server_port int, stateless bool, enableRequestResponseLogging bool) {
+func Serve(transport_flag string, server_host string, server_port int, enableRequestResponseLogging bool) {
 	// Deferred function to recover from a panic
 	defer func() {
 		if r := recover(); r != nil {
 			slog.Error("server crashed,", "error", r)
 		}
 	}()
-	runServer(transport_flag, server_host, server_port, stateless, enableRequestResponseLogging)
+	runServer(transport_flag, server_host, server_port, enableRequestResponseLogging)
 }

@@ -28,10 +28,8 @@ func main() {
 	flag.StringVar(&server_host, "host", "localhost", "The host address for the HTTP server (only relevant if transport is 'http').")
 	var server_port int = 8000
 	flag.IntVar(&server_port, "port", 8000, "The port for the HTTP server (only relevant if transport is 'http').")
-	var stateless bool = false
-	flag.BoolVar(&stateless, "stateless", true, "Whether to run the server in stateless mode (only relevant if transport is 'http').")
 	var enableRequestResponseLogging bool = false
 	flag.BoolVar(&enableRequestResponseLogging, "enableLogging", false, "Whether to enable request and response logging middleware.")
 	flag.Parse()
-	server.Serve(string(transport), server_host, server_port, stateless, enableRequestResponseLogging)
+	server.Serve(string(transport), server_host, server_port, enableRequestResponseLogging)
 }
