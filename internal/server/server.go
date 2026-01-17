@@ -230,7 +230,7 @@ func addMCPTools(server *mcp.Server) error {
 		if err != nil {
 			return fmt.Errorf("failed to reflect output schema from ArxivDownloadPDFOutput: %w", err)
 		}
-		downloadPDFHandler, err := NewArxivToolHandler(downloadPDFInputSchema, downloadPDFOutputSchema, downloadPDFToMinIO)
+		downloadPDFHandler, err := NewArxivToolHandler(downloadPDFInputSchema, downloadPDFOutputSchema, downloadPDFToS3)
 		if err != nil {
 			return fmt.Errorf("failed to create arXiv PDF download handler: %w", err)
 		}

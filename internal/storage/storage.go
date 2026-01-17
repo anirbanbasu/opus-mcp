@@ -46,7 +46,7 @@ func createMinIOClient(config *S3Config) (*minio.Client, error) {
 	return minio.New(config.Endpoint, minioOptions)
 }
 
-// DownloadURLToMinIO downloads a file from an HTTP(s) URL and uploads it to an S3 bucket.
+// DownloadURLToS3 downloads a file from an HTTP(s) URL and uploads it to an S3 bucket.
 // It uses the CreateConfiguredHTTPClient function for the HTTP download to support proxy
 // configurations and custom CA certificates.
 //
@@ -58,7 +58,7 @@ func createMinIOClient(config *S3Config) (*minio.Client, error) {
 //   - objectName: Target object name in the bucket (file name/path)
 //
 // Returns the upload information and an error if any step fails (download, upload, or S3 operations).
-func DownloadURLToMinIO(ctx context.Context, sourceURL string, config *S3Config, bucketName, objectName string) (minio.UploadInfo, error) {
+func DownloadURLToS3(ctx context.Context, sourceURL string, config *S3Config, bucketName, objectName string) (minio.UploadInfo, error) {
 	// Validate inputs
 	if sourceURL == "" {
 		return minio.UploadInfo{}, fmt.Errorf("source URL cannot be empty")
@@ -160,7 +160,7 @@ func DownloadURLToMinIO(ctx context.Context, sourceURL string, config *S3Config,
 	return uploadInfo, nil
 }
 
-// DownloadURLToMinIOStream is a streaming variant that doesn't require knowing the content length upfront.
+// DownloadURLToS3Stream is a streaming variant that doesn't require knowing the content length upfront.
 // This is useful when the server doesn't provide Content-Length header or for very large files.
 //
 // Parameters:
@@ -171,7 +171,7 @@ func DownloadURLToMinIO(ctx context.Context, sourceURL string, config *S3Config,
 //   - objectName: Target object name in the bucket (file name/path)
 //
 // Returns the upload information and an error if any step fails (download, upload, or S3 operations).
-func DownloadURLToMinIOStream(ctx context.Context, sourceURL string, config S3Config, bucketName, objectName string) (minio.UploadInfo, error) {
+func DownloadURLToS3Stream(ctx context.Context, sourceURL string, config S3Config, bucketName, objectName string) (minio.UploadInfo, error) {
 	// Validate inputs
 	if sourceURL == "" {
 		return minio.UploadInfo{}, fmt.Errorf("source URL cannot be empty")
@@ -270,7 +270,7 @@ func DownloadURLToMinIOStream(ctx context.Context, sourceURL string, config S3Co
 	return uploadInfo, nil
 }
 
-// DownloadURLToMinIOWithProgress downloads a file from an HTTP(s) URL and uploads it to S3 storage
+// DownloadURLToS3WithProgress downloads a file from an HTTP(s) URL and uploads it to S3 storage
 // with progress reporting. This is useful for large files where you want to track upload progress.
 //
 // Parameters:
@@ -282,7 +282,7 @@ func DownloadURLToMinIOStream(ctx context.Context, sourceURL string, config S3Co
 //   - progressFunc: Optional callback function that receives progress updates (bytesTransferred, totalBytes)
 //
 // Returns the upload information and an error if any step fails (download, upload, or S3 operations).
-func DownloadURLToMinIOWithProgress(ctx context.Context, sourceURL string, config S3Config, bucketName, objectName string, progressFunc func(bytesTransferred, totalBytes int64)) (minio.UploadInfo, error) {
+func DownloadURLToS3WithProgress(ctx context.Context, sourceURL string, config S3Config, bucketName, objectName string, progressFunc func(bytesTransferred, totalBytes int64)) (minio.UploadInfo, error) {
 	// Validate inputs
 	if sourceURL == "" {
 		return minio.UploadInfo{}, fmt.Errorf("source URL cannot be empty")

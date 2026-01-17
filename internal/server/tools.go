@@ -335,8 +335,8 @@ type ArxivDownloadPDFOutput struct {
 	ETag       string `json:"etag,omitempty" jsonschema:"ETag of the uploaded file for integrity verification"`
 }
 
-// downloadPDFToMinIO handles downloading an arXiv PDF and uploading it to S3 storage
-func downloadPDFToMinIO(ctx context.Context, input json.RawMessage) (any, error) {
+// downloadPDFToS3 handles downloading an arXiv PDF and uploading it to S3 storage
+func downloadPDFToS3(ctx context.Context, input json.RawMessage) (any, error) {
 	var args ArxivDownloadPDFArgs
 	if err := json.Unmarshal(input, &args); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal arguments: %w", err)
@@ -379,7 +379,7 @@ func downloadPDFToMinIO(ctx context.Context, input json.RawMessage) (any, error)
 		"insecure_tls", globalS3Config.InsecureSkipVerify)
 
 	// Download and upload to S3
-	uploadInfo, err := storage.DownloadURLToMinIO(ctx, args.ArticleURL, globalS3Config, S3_ARTICLES_BUCKET, objectName)
+	uploadInfo, err := storage.DownloadURLToS3(ctx, args.ArticleURL, globalS3Config, S3_ARTICLES_BUCKET, objectName)
 	if err != nil {
 		return ArxivDownloadPDFOutput{
 			Success:    false,

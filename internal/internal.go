@@ -13,9 +13,17 @@ import (
 	"github.com/sethvargo/go-envconfig"
 )
 
-type HTTPSecureConfig struct {
-	HTTPProxyConfig *HTTPProxyConfig
-	TLSSecureConfig *TLSSecureConfig
+type HTTPClientConfig struct {
+	HTTPProxyConfig    *HTTPProxyConfig
+	TLSSecureConfig    *TLSSecureConfig
+	MaxIdleConnections int                `env:"OPUS_MCP_HTTP_MAX_IDLE_CONNECTIONS,default=10"`
+	HTTPTimeoutConfig  *HTTPTimeoutConfig `env:",prefix=OPUS_MCP_"`
+}
+
+type HTTPTimeoutConfig struct {
+	IdleConnectionTimeout time.Duration `env:"HTTP_IDLE_CONNECTION_TIMEOUT,default=30s"`
+	TLSHandshakeTimeout   time.Duration `env:"HTTP_TLS_HANDSHAKE_TIMEOUT,default=10s"`
+	ClientTimeout         time.Duration `env:"HTTP_CLIENT_TIMEOUT,default=30s"`
 }
 
 type HTTPProxyConfig struct {
@@ -47,7 +55,7 @@ func CreateConfiguredHTTPClient() (*http.Client, error) {
 	}
 
 	ctx := context.Background()
-	var config HTTPSecureConfig
+	var config HTTPClientConfig
 	if err := envconfig.Process(ctx, &config); err != nil {
 		slog.Error("Failed to process HTTP secure configuration from environment", "error", err)
 		return nil, err
@@ -68,9 +76,9 @@ func CreateConfiguredHTTPClient() (*http.Client, error) {
 	transport := &http.Transport{
 		Proxy:               http.ProxyFromEnvironment,
 		TLSClientConfig:     tlsConfig,
-		MaxIdleConns:        10,
-		IdleConnTimeout:     30 * time.Second,
-		TLSHandshakeTimeout: 10 * time.Second,
+		MaxIdleConns:        config.MaxIdleConnections,
+		IdleConnTimeout:     config.HTTPTimeoutConfig.IdleConnectionTimeout,
+		TLSHandshakeTimeout: config.HTTPTimeoutConfig.TLSHandshakeTimeout,
 	}
 
 	// Log proxy configuration if set (with credentials removed)
@@ -88,7 +96,7 @@ func CreateConfiguredHTTPClient() (*http.Client, error) {
 
 	return &http.Client{
 		Transport: transport,
-		Timeout:   30 * time.Second, // Overall request timeout
+		Timeout:   config.HTTPTimeoutConfig.ClientTimeout,
 	}, nil
 }
 
