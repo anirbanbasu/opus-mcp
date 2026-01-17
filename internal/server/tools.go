@@ -29,21 +29,6 @@ const S3_ARTICLES_BUCKET string = "opus-mcp-articles"
 // See: https://info.arxiv.org/help/api/tou.html
 var arxivRateLimiter = rate.NewLimiter(rate.Every(3*time.Second), 1)
 
-// httpClient is a configured HTTP client with proxy and TLS support
-var httpClient = internal.CreateConfiguredHTTPClient()
-
-// S3Config holds S3 configuration loaded from environment variables
-type S3Config struct {
-	Endpoint           string `env:"OPUS_MCP_S3_ENDPOINT,required,default="`
-	AccessKey          string `env:"OPUS_MCP_S3_ACCESS_KEY,required,default="`
-	SecretKey          string `env:"OPUS_MCP_S3_SECRET_KEY,required,default="`
-	UseSSL             bool   `env:"OPUS_MCP_S3_USE_SSL,default=true"`
-	InsecureSkipVerify bool   `env:"OPUS_MCP_S3_INSECURE_SKIP_VERIFY,default=false"`
-}
-
-// globalS3Config is the S3 configuration loaded at server startup
-var globalS3Config *S3Config
-
 func mcp_tool_errorf(format string, args ...any) *mcp.CallToolResult {
 	slog.Warn(fmt.Sprintf(format, args...))
 	return &mcp.CallToolResult{
@@ -153,6 +138,10 @@ func categoryFetchLatest(ctx context.Context, input json.RawMessage) (any, error
 	// Fetch contents from arXiv API
 	url := arxivApiEndpoint + "?search_query=" + searchQuery + "&start=" + fmt.Sprint(args.StartIndex) + "&max_results=" + fmt.Sprint(args.FetchSize) + "&sortBy=submittedDate&sortOrder=descending"
 	slog.Info("Fetching Atom feed from arXiv", "url", url)
+	httpClient, err := internal.CreateConfiguredHTTPClient()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create configured HTTP client: %w", err)
+	}
 	resp, err := httpClient.Get(url)
 	if err != nil {
 		// Return error immediately - no retry logic
@@ -236,6 +225,10 @@ func fetchCategoryTaxonomy(ctx context.Context, input json.RawMessage) (any, err
 	const taxonomyURL = "https://arxiv.org/category_taxonomy"
 
 	slog.Info("Fetching and parsing arXiv category taxonomy from", "url", taxonomyURL)
+	httpClient, err := internal.CreateConfiguredHTTPClient()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create configured HTTP client: %w", err)
+	}
 	resp, err := httpClient.Get(taxonomyURL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch taxonomy: %w", err)
@@ -378,15 +371,6 @@ func downloadPDFToMinIO(ctx context.Context, input json.RawMessage) (any, error)
 		return nil, fmt.Errorf("S3 configuration not loaded. Please ensure OPUS_MCP_S3_ENDPOINT, OPUS_MCP_S3_ACCESS_KEY, and OPUS_MCP_S3_SECRET_KEY environment variables are set")
 	}
 
-	// Configure S3 client from global config
-	config := storage.MinIOConfig{
-		Endpoint:           globalS3Config.Endpoint,
-		AccessKey:          globalS3Config.AccessKey,
-		SecretKey:          globalS3Config.SecretKey,
-		UseSSL:             globalS3Config.UseSSL,
-		InsecureSkipVerify: globalS3Config.InsecureSkipVerify,
-	}
-
 	slog.Info("Starting arXiv PDF download to S3 storage",
 		"pdf_url", args.ArticleURL,
 		"bucket", S3_ARTICLES_BUCKET,
@@ -395,7 +379,7 @@ func downloadPDFToMinIO(ctx context.Context, input json.RawMessage) (any, error)
 		"insecure_tls", globalS3Config.InsecureSkipVerify)
 
 	// Download and upload to S3
-	uploadInfo, err := storage.DownloadURLToMinIO(ctx, args.ArticleURL, config, S3_ARTICLES_BUCKET, objectName)
+	uploadInfo, err := storage.DownloadURLToMinIO(ctx, args.ArticleURL, globalS3Config, S3_ARTICLES_BUCKET, objectName)
 	if err != nil {
 		return ArxivDownloadPDFOutput{
 			Success:    false,

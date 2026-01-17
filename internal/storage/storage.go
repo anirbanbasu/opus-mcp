@@ -17,17 +17,17 @@ import (
 	"github.com/minio/minio-go/v7/pkg/credentials"
 )
 
-// MinIOConfig holds the configuration for S3-compatible storage connections
-type MinIOConfig struct {
-	Endpoint           string // S3 server endpoint (e.g., "play.min.io:9000")
-	AccessKey          string // S3 access key
-	SecretKey          string // S3 secret key
-	UseSSL             bool   // Whether to use SSL/TLS
-	InsecureSkipVerify bool   // Whether to skip TLS certificate verification (⚠️ INSECURE - use only for self-signed certificates in dev/test)
+// S3Config holds S3 configuration loaded from environment variables
+type S3Config struct {
+	Endpoint           string `env:"OPUS_MCP_S3_ENDPOINT,required,default="`
+	AccessKey          string `env:"OPUS_MCP_S3_ACCESS_KEY,required,default="`
+	SecretKey          string `env:"OPUS_MCP_S3_SECRET_KEY,required,default="`
+	UseSSL             bool   `env:"OPUS_MCP_S3_USE_SSL,default=true"`
+	InsecureSkipVerify bool   `env:"OPUS_MCP_S3_INSECURE_SKIP_VERIFY,default=false"`
 }
 
 // createMinIOClient creates a configured S3 client with the given config
-func createMinIOClient(config MinIOConfig) (*minio.Client, error) {
+func createMinIOClient(config *S3Config) (*minio.Client, error) {
 	minioOptions := &minio.Options{
 		Creds:  credentials.NewStaticV4(config.AccessKey, config.SecretKey, ""),
 		Secure: config.UseSSL,
@@ -35,7 +35,7 @@ func createMinIOClient(config MinIOConfig) (*minio.Client, error) {
 
 	// Configure custom transport for insecure TLS if needed
 	if config.InsecureSkipVerify {
-		slog.Warn("🚨 SECURITY WARNING: TLS certificate verification is DISABLED for S3 connection (InsecureSkipVerify=true)")
+		slog.Warn("🚨 SECURITY WARNING: TLS certificate verification is DISABLED for S3 connection")
 		minioOptions.Transport = &http.Transport{
 			TLSClientConfig: &tls.Config{
 				InsecureSkipVerify: true,
@@ -58,7 +58,7 @@ func createMinIOClient(config MinIOConfig) (*minio.Client, error) {
 //   - objectName: Target object name in the bucket (file name/path)
 //
 // Returns the upload information and an error if any step fails (download, upload, or S3 operations).
-func DownloadURLToMinIO(ctx context.Context, sourceURL string, config MinIOConfig, bucketName, objectName string) (minio.UploadInfo, error) {
+func DownloadURLToMinIO(ctx context.Context, sourceURL string, config *S3Config, bucketName, objectName string) (minio.UploadInfo, error) {
 	// Validate inputs
 	if sourceURL == "" {
 		return minio.UploadInfo{}, fmt.Errorf("source URL cannot be empty")
@@ -101,7 +101,10 @@ func DownloadURLToMinIO(ctx context.Context, sourceURL string, config MinIOConfi
 		"endpoint", config.Endpoint)
 
 	// Download the file from the URL using the configured HTTP client
-	httpClient := internal.CreateConfiguredHTTPClient()
+	httpClient, err := internal.CreateConfiguredHTTPClient()
+	if err != nil {
+		return minio.UploadInfo{}, fmt.Errorf("failed to create configured HTTP client: %w", err)
+	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, sourceURL, nil)
 	if err != nil {
@@ -168,7 +171,7 @@ func DownloadURLToMinIO(ctx context.Context, sourceURL string, config MinIOConfi
 //   - objectName: Target object name in the bucket (file name/path)
 //
 // Returns the upload information and an error if any step fails (download, upload, or S3 operations).
-func DownloadURLToMinIOStream(ctx context.Context, sourceURL string, config MinIOConfig, bucketName, objectName string) (minio.UploadInfo, error) {
+func DownloadURLToMinIOStream(ctx context.Context, sourceURL string, config S3Config, bucketName, objectName string) (minio.UploadInfo, error) {
 	// Validate inputs
 	if sourceURL == "" {
 		return minio.UploadInfo{}, fmt.Errorf("source URL cannot be empty")
@@ -190,7 +193,7 @@ func DownloadURLToMinIOStream(ctx context.Context, sourceURL string, config MinI
 	}
 
 	// Initialize S3 client
-	minioClient, err := createMinIOClient(config)
+	minioClient, err := createMinIOClient(&config)
 	if err != nil {
 		return minio.UploadInfo{}, fmt.Errorf("failed to create S3 client: %w", err)
 	}
@@ -211,7 +214,10 @@ func DownloadURLToMinIOStream(ctx context.Context, sourceURL string, config MinI
 		"endpoint", config.Endpoint)
 
 	// Download the file from the URL using the configured HTTP client
-	httpClient := internal.CreateConfiguredHTTPClient()
+	httpClient, err := internal.CreateConfiguredHTTPClient()
+	if err != nil {
+		return minio.UploadInfo{}, fmt.Errorf("failed to create configured HTTP client: %w", err)
+	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, sourceURL, nil)
 	if err != nil {
@@ -276,7 +282,7 @@ func DownloadURLToMinIOStream(ctx context.Context, sourceURL string, config MinI
 //   - progressFunc: Optional callback function that receives progress updates (bytesTransferred, totalBytes)
 //
 // Returns the upload information and an error if any step fails (download, upload, or S3 operations).
-func DownloadURLToMinIOWithProgress(ctx context.Context, sourceURL string, config MinIOConfig, bucketName, objectName string, progressFunc func(bytesTransferred, totalBytes int64)) (minio.UploadInfo, error) {
+func DownloadURLToMinIOWithProgress(ctx context.Context, sourceURL string, config S3Config, bucketName, objectName string, progressFunc func(bytesTransferred, totalBytes int64)) (minio.UploadInfo, error) {
 	// Validate inputs
 	if sourceURL == "" {
 		return minio.UploadInfo{}, fmt.Errorf("source URL cannot be empty")
@@ -298,7 +304,7 @@ func DownloadURLToMinIOWithProgress(ctx context.Context, sourceURL string, confi
 	}
 
 	// Initialize S3 client
-	minioClient, err := createMinIOClient(config)
+	minioClient, err := createMinIOClient(&config)
 	if err != nil {
 		return minio.UploadInfo{}, fmt.Errorf("failed to create S3 client: %w", err)
 	}
@@ -319,7 +325,10 @@ func DownloadURLToMinIOWithProgress(ctx context.Context, sourceURL string, confi
 		"endpoint", config.Endpoint)
 
 	// Download the file from the URL using the configured HTTP client
-	httpClient := internal.CreateConfiguredHTTPClient()
+	httpClient, err := internal.CreateConfiguredHTTPClient()
+	if err != nil {
+		return minio.UploadInfo{}, fmt.Errorf("failed to create configured HTTP client: %w", err)
+	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, sourceURL, nil)
 	if err != nil {

@@ -40,7 +40,7 @@ type TLSSecureConfig struct {
 // It respects standard proxy environment variables (HTTP_PROXY, HTTPS_PROXY, NO_PROXY) and
 // supports custom CA certificates via SSL_CERT_FILE or REQUESTS_CA_BUNDLE environment variables.
 // If OPUS_MCP_INSECURE_SKIP_VERIFY=true is set, certificate verification will be disabled (⚠️ INSECURE).
-func CreateConfiguredHTTPClient() *http.Client {
+func CreateConfiguredHTTPClient() (*http.Client, error) {
 	// Setup TLS config
 	tlsConfig := &tls.Config{
 		MinVersion: tls.VersionTLS12, // Enforce minimum TLS 1.2
@@ -50,6 +50,7 @@ func CreateConfiguredHTTPClient() *http.Client {
 	var config HTTPSecureConfig
 	if err := envconfig.Process(ctx, &config); err != nil {
 		slog.Error("Failed to process HTTP secure configuration from environment", "error", err)
+		return nil, err
 	}
 
 	// Load custom CAs if specified
@@ -60,7 +61,7 @@ func CreateConfiguredHTTPClient() *http.Client {
 	// Check for insecure mode
 	if config.TLSSecureConfig != nil && config.TLSSecureConfig.InsecureSkipVerify {
 		tlsConfig.InsecureSkipVerify = true
-		slog.Warn("🚨 SECURITY WARNING: TLS certificate verification is DISABLED")
+		slog.Warn("🚨 HTTP TLS certificate verification is DISABLED")
 	}
 
 	// Create transport with proxy support
@@ -88,7 +89,7 @@ func CreateConfiguredHTTPClient() *http.Client {
 	return &http.Client{
 		Transport: transport,
 		Timeout:   30 * time.Second, // Overall request timeout
-	}
+	}, nil
 }
 
 // LoadCustomCABundle loads custom CA certificates from environment-specified paths.
