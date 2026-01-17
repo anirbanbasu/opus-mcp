@@ -11,7 +11,6 @@ import (
 	"os/signal"
 	"reflect"
 	"runtime"
-	"strconv"
 	"syscall"
 	"time"
 
@@ -21,6 +20,7 @@ import (
 	"github.com/mmcdole/gofeed"
 	ext "github.com/mmcdole/gofeed/extensions"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/sethvargo/go-envconfig"
 )
 
 var serverProcessStartTime time.Time
@@ -31,57 +31,67 @@ func uptime() time.Duration {
 
 // LoadS3Config loads S3 configuration from environment variables
 func LoadS3Config() (*S3Config, error) {
-	endpoint := os.Getenv("OPUS_MCP_S3_ENDPOINT")
-	accessKey := os.Getenv("OPUS_MCP_S3_ACCESS_KEY")
-	secretKey := os.Getenv("OPUS_MCP_S3_SECRET_KEY")
+	// endpoint := os.Getenv("OPUS_MCP_S3_ENDPOINT")
+	// accessKey := os.Getenv("OPUS_MCP_S3_ACCESS_KEY")
+	// secretKey := os.Getenv("OPUS_MCP_S3_SECRET_KEY")
 
-	if endpoint == "" {
-		return nil, fmt.Errorf("OPUS_MCP_S3_ENDPOINT environment variable is required")
-	}
-	if accessKey == "" {
-		return nil, fmt.Errorf("OPUS_MCP_S3_ACCESS_KEY environment variable is required")
-	}
-	if secretKey == "" {
-		return nil, fmt.Errorf("OPUS_MCP_S3_SECRET_KEY environment variable is required")
+	// if endpoint == "" {
+	// 	return nil, fmt.Errorf("OPUS_MCP_S3_ENDPOINT environment variable is required")
+	// }
+	// if accessKey == "" {
+	// 	return nil, fmt.Errorf("OPUS_MCP_S3_ACCESS_KEY environment variable is required")
+	// }
+	// if secretKey == "" {
+	// 	return nil, fmt.Errorf("OPUS_MCP_S3_SECRET_KEY environment variable is required")
+	// }
+
+	// // Optional: OPUS_MCP_S3_USE_SSL (defaults to true)
+	// useSSL := true
+	// if useSSLStr := os.Getenv("OPUS_MCP_S3_USE_SSL"); useSSLStr != "" {
+	// 	if parsed, err := strconv.ParseBool(useSSLStr); err == nil {
+	// 		useSSL = parsed
+	// 	} else {
+	// 		slog.Warn("Invalid OPUS_MCP_S3_USE_SSL value, using default", "value", useSSLStr, "default", true)
+	// 	}
+	// }
+
+	// // Optional: OPUS_MCP_S3_INSECURE_SKIP_VERIFY (defaults to false)
+	// insecureSkipVerify := false
+	// if skipVerifyStr := os.Getenv("OPUS_MCP_S3_INSECURE_SKIP_VERIFY"); skipVerifyStr != "" {
+	// 	if parsed, err := strconv.ParseBool(skipVerifyStr); err == nil {
+	// 		insecureSkipVerify = parsed
+	// 		if insecureSkipVerify {
+	// 			slog.Warn("⚠️  S3 TLS certificate verification is DISABLED - this is insecure!")
+	// 		}
+	// 	} else {
+	// 		slog.Warn("Invalid OPUS_MCP_S3_INSECURE_SKIP_VERIFY value, using default", "value", skipVerifyStr, "default", false)
+	// 	}
+	// }
+
+	// config := &S3Config{
+	// 	Endpoint:           endpoint,
+	// 	AccessKey:          accessKey,
+	// 	SecretKey:          secretKey,
+	// 	UseSSL:             useSSL,
+	// 	InsecureSkipVerify: insecureSkipVerify,
+	// }
+	ctx := context.Background()
+	var config S3Config
+	if err := envconfig.Process(ctx, &config); err != nil {
+		slog.Error("Failed to process S3 configuration from environment", "error", err)
+		return nil, err
 	}
 
-	// Optional: OPUS_MCP_S3_USE_SSL (defaults to true)
-	useSSL := true
-	if useSSLStr := os.Getenv("OPUS_MCP_S3_USE_SSL"); useSSLStr != "" {
-		if parsed, err := strconv.ParseBool(useSSLStr); err == nil {
-			useSSL = parsed
-		} else {
-			slog.Warn("Invalid OPUS_MCP_S3_USE_SSL value, using default", "value", useSSLStr, "default", true)
-		}
-	}
-
-	// Optional: OPUS_MCP_S3_INSECURE_SKIP_VERIFY (defaults to false)
-	insecureSkipVerify := false
-	if skipVerifyStr := os.Getenv("OPUS_MCP_S3_INSECURE_SKIP_VERIFY"); skipVerifyStr != "" {
-		if parsed, err := strconv.ParseBool(skipVerifyStr); err == nil {
-			insecureSkipVerify = parsed
-			if insecureSkipVerify {
-				slog.Warn("⚠️  S3 TLS certificate verification is DISABLED - this is insecure!")
-			}
-		} else {
-			slog.Warn("Invalid OPUS_MCP_S3_INSECURE_SKIP_VERIFY value, using default", "value", skipVerifyStr, "default", false)
-		}
-	}
-
-	config := &S3Config{
-		Endpoint:           endpoint,
-		AccessKey:          accessKey,
-		SecretKey:          secretKey,
-		UseSSL:             useSSL,
-		InsecureSkipVerify: insecureSkipVerify,
+	if config.InsecureSkipVerify {
+		slog.Warn("⚠️  S3 TLS certificate verification is DISABLED - this is insecure!")
 	}
 
 	slog.Info("S3 configuration loaded from environment variables",
-		"endpoint", endpoint,
-		"use_ssl", useSSL,
-		"insecure_skip_verify", insecureSkipVerify)
+		"endpoint", config.Endpoint,
+		"use_ssl", config.UseSSL,
+		"insecure_skip_verify", config.InsecureSkipVerify)
 
-	return config, nil
+	return &config, nil
 }
 
 // createCORSMiddleware adds CORS headers to responses and handles OPTIONS requests

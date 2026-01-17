@@ -1,6 +1,7 @@
 package internal
 
 import (
+	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"log/slog"
@@ -8,7 +9,32 @@ import (
 	"net/url"
 	"os"
 	"time"
+
+	"github.com/sethvargo/go-envconfig"
 )
+
+type HTTPSecureConfig struct {
+	HTTPProxyConfig *HTTPProxyConfig
+	TLSSecureConfig *TLSSecureConfig
+}
+
+type HTTPProxyConfig struct {
+	HttpProxy           string `env:"HTTP_PROXY,default="`
+	HttpsProxy          string `env:"HTTPS_PROXY,default="`
+	NoProxy             string `env:"NO_PROXY,default="`
+	LowercaseHttpProxy  string `env:"http_proxy,default="`
+	LowercaseHttpsProxy string `env:"https_proxy,default="`
+	LowercaseNoProxy    string `env:"no_proxy,default="`
+}
+
+type TLSSecureConfig struct {
+	SslCertFile      string `env:"SSL_CERT_FILE,default="`
+	RequestsCaBundle string `env:"REQUESTS_CA_BUNDLE,default="`
+	CurlCaBundle     string `env:"CURL_CA_BUNDLE,default="`
+	// InsecureSkipVerify indicates whether to skip TLS certificate verification.
+	// ⚠️ WARNING: Disabling verification is insecure and should only be used in development/testing.
+	InsecureSkipVerify bool `env:"OPUS_MCP_INSECURE_SKIP_VERIFY,default=false"`
+}
 
 // CreateConfiguredHTTPClient creates an HTTP client with proxy support and custom TLS configuration.
 // It respects standard proxy environment variables (HTTP_PROXY, HTTPS_PROXY, NO_PROXY) and
@@ -20,15 +46,21 @@ func CreateConfiguredHTTPClient() *http.Client {
 		MinVersion: tls.VersionTLS12, // Enforce minimum TLS 1.2
 	}
 
+	ctx := context.Background()
+	var config HTTPSecureConfig
+	if err := envconfig.Process(ctx, &config); err != nil {
+		slog.Error("Failed to process HTTP secure configuration from environment", "error", err)
+	}
+
 	// Load custom CAs if specified
-	if customCA := LoadCustomCABundle(); customCA != nil {
+	if customCA := LoadCustomCABundle(config.TLSSecureConfig); customCA != nil {
 		tlsConfig.RootCAs = customCA
 	}
 
 	// Check for insecure mode
-	if ShouldSkipTLSVerification() {
+	if config.TLSSecureConfig != nil && config.TLSSecureConfig.InsecureSkipVerify {
 		tlsConfig.InsecureSkipVerify = true
-		slog.Warn("🚨 SECURITY WARNING: TLS certificate verification is DISABLED (InsecureSkipVerify=true)")
+		slog.Warn("🚨 SECURITY WARNING: TLS certificate verification is DISABLED")
 	}
 
 	// Create transport with proxy support
@@ -41,16 +73,16 @@ func CreateConfiguredHTTPClient() *http.Client {
 	}
 
 	// Log proxy configuration if set (with credentials removed)
-	if proxy := os.Getenv("HTTP_PROXY"); proxy != "" {
-		slog.Info("Using HTTP proxy", "proxy", SanitizeProxyURL(proxy))
-	} else if proxy := os.Getenv("http_proxy"); proxy != "" {
-		slog.Info("Using HTTP proxy", "proxy", SanitizeProxyURL(proxy))
+	if config.HTTPProxyConfig.HttpProxy != "" {
+		slog.Info("Using HTTP proxy", "proxy", SanitizeProxyURL(config.HTTPProxyConfig.HttpProxy))
+	} else if config.HTTPProxyConfig.LowercaseHttpProxy != "" {
+		slog.Info("Using HTTP proxy", "proxy", SanitizeProxyURL(config.HTTPProxyConfig.LowercaseHttpProxy))
 	}
 
-	if proxy := os.Getenv("HTTPS_PROXY"); proxy != "" {
-		slog.Info("Using HTTPS proxy", "proxy", SanitizeProxyURL(proxy))
-	} else if proxy := os.Getenv("https_proxy"); proxy != "" {
-		slog.Info("Using HTTPS proxy", "proxy", SanitizeProxyURL(proxy))
+	if config.HTTPProxyConfig.HttpsProxy != "" {
+		slog.Info("Using HTTPS proxy", "proxy", SanitizeProxyURL(config.HTTPProxyConfig.HttpsProxy))
+	} else if config.HTTPProxyConfig.LowercaseHttpsProxy != "" {
+		slog.Info("Using HTTPS proxy", "proxy", SanitizeProxyURL(config.HTTPProxyConfig.LowercaseHttpsProxy))
 	}
 
 	return &http.Client{
@@ -62,7 +94,10 @@ func CreateConfiguredHTTPClient() *http.Client {
 // LoadCustomCABundle loads custom CA certificates from environment-specified paths.
 // It checks SSL_CERT_FILE, REQUESTS_CA_BUNDLE, and CURL_CA_BUNDLE in that order.
 // Returns a cert pool with system CAs plus any custom CAs found, or nil if none specified.
-func LoadCustomCABundle() *x509.CertPool {
+func LoadCustomCABundle(tlsConfig *TLSSecureConfig) *x509.CertPool {
+	if tlsConfig == nil {
+		return nil
+	}
 	// Start with system's trusted CAs
 	rootCAs, err := x509.SystemCertPool()
 	if err != nil {
@@ -75,9 +110,9 @@ func LoadCustomCABundle() *x509.CertPool {
 		envVar string
 		path   string
 	}{
-		{"SSL_CERT_FILE", os.Getenv("SSL_CERT_FILE")},
-		{"REQUESTS_CA_BUNDLE", os.Getenv("REQUESTS_CA_BUNDLE")},
-		{"CURL_CA_BUNDLE", os.Getenv("CURL_CA_BUNDLE")},
+		{"SSL_CERT_FILE", tlsConfig.SslCertFile},
+		{"REQUESTS_CA_BUNDLE", tlsConfig.RequestsCaBundle},
+		{"CURL_CA_BUNDLE", tlsConfig.CurlCaBundle},
 	}
 
 	loadedAny := false
@@ -100,13 +135,6 @@ func LoadCustomCABundle() *x509.CertPool {
 		return rootCAs
 	}
 	return nil // Use default system CAs
-}
-
-// ShouldSkipTLSVerification checks if TLS certificate verification should be disabled.
-// Returns true only if OPUS_MCP_INSECURE_SKIP_VERIFY environment variable is explicitly set to "true".
-// ⚠️ WARNING: Disabling verification is insecure and should only be used in development/testing.
-func ShouldSkipTLSVerification() bool {
-	return os.Getenv("OPUS_MCP_INSECURE_SKIP_VERIFY") == "true"
 }
 
 // SanitizeProxyURL removes username and password from a proxy URL before logging.

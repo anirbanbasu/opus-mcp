@@ -34,11 +34,11 @@ var httpClient = internal.CreateConfiguredHTTPClient()
 
 // S3Config holds S3 configuration loaded from environment variables
 type S3Config struct {
-	Endpoint           string
-	AccessKey          string
-	SecretKey          string
-	UseSSL             bool
-	InsecureSkipVerify bool
+	Endpoint           string `env:"OPUS_MCP_S3_ENDPOINT,required,default="`
+	AccessKey          string `env:"OPUS_MCP_S3_ACCESS_KEY,required,default="`
+	SecretKey          string `env:"OPUS_MCP_S3_SECRET_KEY,required,default="`
+	UseSSL             bool   `env:"OPUS_MCP_S3_USE_SSL,default=true"`
+	InsecureSkipVerify bool   `env:"OPUS_MCP_S3_INSECURE_SKIP_VERIFY,default=false"`
 }
 
 // globalS3Config is the S3 configuration loaded at server startup
