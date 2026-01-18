@@ -27,12 +27,24 @@ type HTTPTimeoutConfig struct {
 }
 
 type HTTPProxyConfig struct {
-	HttpProxy           string `env:"HTTP_PROXY,default="`
-	HttpsProxy          string `env:"HTTPS_PROXY,default="`
-	NoProxy             string `env:"NO_PROXY,default="`
-	LowercaseHttpProxy  string `env:"http_proxy,default="`
-	LowercaseHttpsProxy string `env:"https_proxy,default="`
-	LowercaseNoProxy    string `env:"no_proxy,default="`
+	HttpProxy  string `env:"http_proxy,default="`
+	HttpsProxy string `env:"https_proxy,default="`
+	NoProxy    string `env:"no_proxy,default="`
+}
+
+func AliasedLookuper(l envconfig.Lookuper) envconfig.Lookuper {
+	aliases := map[string]string{
+		"http_proxy":  "HTTP_PROXY",
+		"https_proxy": "HTTPS_PROXY",
+		"no_proxy":    "NO_PROXY",
+	}
+	return envconfig.LookuperFunc(func(s string) (string, bool) {
+		if alias, ok := aliases[s]; ok {
+			return l.Lookup(alias)
+		} else {
+			return l.Lookup(s)
+		}
+	})
 }
 
 type TLSSecureConfig struct {
@@ -56,7 +68,11 @@ func CreateConfiguredHTTPClient() (*http.Client, error) {
 
 	ctx := context.Background()
 	var config HTTPClientConfig
-	if err := envconfig.Process(ctx, &config); err != nil {
+	envc := envconfig.Config{
+		Target:   &config,
+		Lookuper: AliasedLookuper(envconfig.OsLookuper()),
+	}
+	if err := envconfig.ProcessWith(ctx, &envc); err != nil {
 		slog.Error("Failed to process HTTP secure configuration from environment", "error", err)
 		return nil, err
 	}
@@ -84,14 +100,10 @@ func CreateConfiguredHTTPClient() (*http.Client, error) {
 	// Log proxy configuration if set (with credentials removed)
 	if config.HTTPProxyConfig.HttpProxy != "" {
 		slog.Info("Using HTTP proxy", "proxy", SanitizeProxyURL(config.HTTPProxyConfig.HttpProxy))
-	} else if config.HTTPProxyConfig.LowercaseHttpProxy != "" {
-		slog.Info("Using HTTP proxy", "proxy", SanitizeProxyURL(config.HTTPProxyConfig.LowercaseHttpProxy))
 	}
 
 	if config.HTTPProxyConfig.HttpsProxy != "" {
 		slog.Info("Using HTTPS proxy", "proxy", SanitizeProxyURL(config.HTTPProxyConfig.HttpsProxy))
-	} else if config.HTTPProxyConfig.LowercaseHttpsProxy != "" {
-		slog.Info("Using HTTPS proxy", "proxy", SanitizeProxyURL(config.HTTPProxyConfig.LowercaseHttpsProxy))
 	}
 
 	return &http.Client{
