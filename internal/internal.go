@@ -27,24 +27,10 @@ type HTTPTimeoutConfig struct {
 }
 
 type HTTPProxyConfig struct {
-	HttpProxy  string `env:"http_proxy,default="`
-	HttpsProxy string `env:"https_proxy,default="`
-	NoProxy    string `env:"no_proxy,default="`
-}
-
-func AliasedLookuper(l envconfig.Lookuper) envconfig.Lookuper {
-	aliases := map[string]string{
-		"http_proxy":  "HTTP_PROXY",
-		"https_proxy": "HTTPS_PROXY",
-		"no_proxy":    "NO_PROXY",
-	}
-	return envconfig.LookuperFunc(func(s string) (string, bool) {
-		if alias, ok := aliases[s]; ok {
-			return l.Lookup(alias)
-		} else {
-			return l.Lookup(s)
-		}
-	})
+	// Use default for aliasing, see: https://github.com/sethvargo/go-envconfig/issues/134#issuecomment-3765442176
+	HttpProxy  string `env:"http_proxy,default=$HTTP_PROXY"`
+	HttpsProxy string `env:"https_proxy,default=$HTTPS_PROXY"`
+	NoProxy    string `env:"no_proxy,default=$NO_PROXY"`
 }
 
 type TLSSecureConfig struct {
@@ -68,11 +54,7 @@ func CreateConfiguredHTTPClient() (*http.Client, error) {
 
 	ctx := context.Background()
 	var config HTTPClientConfig
-	envc := envconfig.Config{
-		Target:   &config,
-		Lookuper: AliasedLookuper(envconfig.OsLookuper()),
-	}
-	if err := envconfig.ProcessWith(ctx, &envc); err != nil {
+	if err := envconfig.Process(ctx, &config); err != nil {
 		slog.Error("Failed to process HTTP secure configuration from environment", "error", err)
 		return nil, err
 	}
