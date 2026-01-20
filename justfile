@@ -83,6 +83,13 @@ tidy:
 pre-commit: fmt lint-fix tidy run-tests security
     @echo "✓ All pre-commit checks passed!"
 
+# Update Go module dependencies
+update-deps:
+    @echo "Updating Go module dependencies..."
+    @go get -u ./...
+    @go mod tidy
+    @echo "✓ Dependencies updated"
+
 # Install pre-commit hooks (using prek - faster than pre-commit)
 install-hooks:
     @echo "Installing pre-commit hooks with prek..."

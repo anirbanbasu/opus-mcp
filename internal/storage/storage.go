@@ -35,7 +35,7 @@ func createMinIOClient(config *S3Config) (*minio.Client, error) {
 
 	// Configure custom transport for insecure TLS if needed
 	if config.InsecureSkipVerify {
-		slog.Warn("🚨 SECURITY WARNING: TLS certificate verification is DISABLED for S3 connection")
+		slog.Warn("🚨 TLS certificate verification is DISABLED for S3 connection")
 		minioOptions.Transport = &http.Transport{
 			TLSClientConfig: &tls.Config{
 				InsecureSkipVerify: true,
